@@ -16,6 +16,7 @@ import {
   TopNavigation
 } from '@cloudscape-design/components';
 import '@cloudscape-design/global-styles/index.css';
+import './App.css';
 import { InvestigacionService } from './services/InvestigacionService';
 import LogViewer from './components/LogViewer';
 
@@ -39,23 +40,62 @@ Secretaría de Salud de Nayarit`;
     
     setSessionId(newSessionId);
     setIsInvestigating(true);
-    setLogs([]);
+    setLogs([{
+      timestamp: new Date().toISOString(),
+      message: '🚀 Iniciando investigación dual...',
+      type: 'info'
+    }, {
+      timestamp: new Date().toISOString(),
+      message: `📊 Procesando ${entidadesList.length} entidades`,
+      type: 'info'
+    }]);
     
     try {
       await InvestigacionService.iniciarInvestigacion(entidadesList, newSessionId);
     } catch (error) {
       console.error('Error iniciando investigación:', error);
+      setLogs(prev => [...prev, {
+        timestamp: new Date().toISOString(),
+        message: `❌ Error: ${error.message}`,
+        type: 'error'
+      }]);
     }
   };
 
   const exportarResultados = async () => {
     if (!sessionId) return;
     
+    // Agregar log de inicio de exportación
+    setLogs(prev => [...prev, {
+      timestamp: new Date().toISOString(),
+      message: '📋 Iniciando exportación y filtrado...',
+      type: 'info'
+    }]);
+    
     try {
       const response = await InvestigacionService.exportarResultados(sessionId);
-      // Mostrar notificación de éxito
+      
+      setLogs(prev => [...prev, {
+        timestamp: new Date().toISOString(),
+        message: `✅ Exportación completada: ${response.filename}`,
+        type: 'success'
+      }]);
+      
+      if (response.archivo_filtrado) {
+        setLogs(prev => [...prev, {
+          timestamp: new Date().toISOString(),
+          message: `📋 Archivo filtrado: ${response.archivo_filtrado.split('/').pop()}`,
+          type: 'success'
+        }]);
+      }
+      
     } catch (error) {
       console.error('Error exportando:', error);
+      setLogs(prev => [...prev, {
+        timestamp: new Date().toISOString(),
+        message: `❌ Error en exportación: ${error.message}`,
+        type: 'error'
+      }]);
     }
   };
 
@@ -100,16 +140,18 @@ Secretaría de Salud de Nayarit`;
 
   return (
     <>
-      <style>{`
-        body {
-          background: linear-gradient(180deg, #FF9900 0%, #FFB84D 20%, #FFCC80 40%, #FFE0B3 60%, #FFF2E6 80%, #FFFFFF 100%) !important;
-          min-height: 100vh !important;
-          background-attachment: fixed !important;
-        }
-      `}</style>
       <div style={{
         minHeight: '100vh',
-        background: 'transparent'
+        background: 'linear-gradient(180deg, #FFF4E6 0%, #FFF8F0 30%, #FFFCF7 60%, #FFFFFF 100%)',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: -1
+      }}></div>
+      <div style={{
+        minHeight: '100vh',
+        position: 'relative'
       }}>
       <div style={{
         backgroundColor: '#232F3E',
@@ -122,7 +164,7 @@ Secretaría de Salud de Nayarit`;
           <img 
             src="https://upload.wikimedia.org/wikipedia/commons/9/93/Amazon_Web_Services_Logo.svg" 
             alt="AWS" 
-            style={{ height: '28px', filter: 'brightness(0) invert(1)' }}
+            style={{ height: '24px', filter: 'brightness(0) invert(1)' }}
           />
           <span style={{ 
             color: '#fff', 
@@ -130,7 +172,7 @@ Secretaría de Salud de Nayarit`;
             fontSize: '18px',
             fontFamily: 'Amazon Ember, sans-serif',
             textTransform: 'uppercase'
-          }}>AWS VELCH</span>
+          }}>VELCH</span>
           <span style={{ color: '#ccc', fontSize: '18px' }}>|</span>
           <span style={{ 
             color: '#fff', 
@@ -139,11 +181,30 @@ Secretaría de Salud de Nayarit`;
             textTransform: 'uppercase'
           }}>CONTACT FINDER LATAM</span>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginLeft: 'auto', marginRight: '40px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+            <span style={{ 
+              color: '#fff', 
+              fontSize: '14px',
+              fontFamily: 'Amazon Ember, sans-serif'
+            }}>Soporte</span>
+            <span style={{ color: '#fff', marginLeft: '5px' }}>▼</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+            <span style={{ 
+              color: '#fff', 
+              fontSize: '14px',
+              fontFamily: 'Amazon Ember, sans-serif'
+            }}>Cuenta</span>
+            <span style={{ color: '#fff', marginLeft: '5px' }}>▼</span>
+          </div>
+        </div>
       </div>
       <AppLayout
         navigationHide
         toolsHide
         content={
+        <div style={{ background: 'transparent' }}>
         <ContentLayout
           header={
             <div>
@@ -156,7 +217,7 @@ Secretaría de Salud de Nayarit`;
                 fontFamily: 'Amazon Ember, sans-serif',
                 textTransform: 'uppercase'
               }}>
-                🕵️ INVESTIGADOR DE ENTIDADES
+                INVESTIGADOR DE ENTIDADES
               </h1>
               <p style={{ 
                 fontSize: '1.2rem', 
@@ -184,7 +245,7 @@ Secretaría de Salud de Nayarit`;
                   fontFamily: 'Amazon Ember, sans-serif',
                   textTransform: 'uppercase'
                 }}>
-                  📝 PANEL DE INVESTIGACIÓN
+                  PANEL DE INVESTIGACIÓN
                 </h2>
               }
             >
@@ -210,14 +271,14 @@ Secretaría de Salud de Nayarit`;
                     disabled={isInvestigating || !entidades.trim()}
                     loading={isInvestigating}
                   >
-                    🚀 Iniciar Investigación Dual
+                    INICIAR INVESTIGACIÓN DUAL
                   </Button>
                   
                   <Button
                     onClick={exportarResultados}
                     disabled={!status || status.status !== 'completado'}
                   >
-                    💾 Exportar Resultados
+                    EXPORTAR Y FILTRAR CONTACTOS
                   </Button>
                 </SpaceBetween>
                 
@@ -241,22 +302,26 @@ Secretaría de Salud de Nayarit`;
               </SpaceBetween>
             </Container>
 
-            {/* Resultados */}
-            {status && status.resultados && status.resultados.length > 0 && (
-              <Container
-                header={
-                  <h2 style={{ 
-                    fontSize: '1.8rem', 
-                    fontWeight: 'bold', 
-                    color: '#232F3E',
-                    margin: 0,
-                    fontFamily: 'Amazon Ember, sans-serif',
-                    textTransform: 'uppercase'
-                  }}>
-                    📊 RESULTADOS DE INVESTIGACIÓN
-                  </h2>
-                }
-              >
+            {/* Contenedor para Resultados y Estado lado a lado */}
+            <div style={{ display: 'flex', gap: '20px' }}>
+              
+              {/* Resultados */}
+              {status && status.resultados && status.resultados.length > 0 && (
+                <div style={{ flex: 1 }}>
+                  <Container
+                    header={
+                      <h2 style={{ 
+                        fontSize: '1.8rem', 
+                        fontWeight: 'bold', 
+                        color: '#232F3E',
+                        margin: 0,
+                        fontFamily: 'Amazon Ember, sans-serif',
+                        textTransform: 'uppercase'
+                      }}>
+                        RESULTADOS DE INVESTIGACIÓN
+                      </h2>
+                    }
+                  >
                 <Cards
                   cardDefinition={{
                     header: item => item.entidad,
@@ -307,11 +372,18 @@ Secretaría de Salud de Nayarit`;
                   ]}
                   items={status.resultados}
                 />
-              </Container>
-            )}
+                  </Container>
+                </div>
+              )}
+              
+              {/* Log Viewer */}
+              <div style={{ flex: 1 }}>
+                <LogViewer logs={logs} />
+              </div>
+              
+            </div>
 
-            {/* Log Viewer */}
-            <LogViewer logs={logs} />
+
 
             {/* Alertas */}
             {status?.status === 'error' && (
@@ -329,9 +401,11 @@ Secretaría de Salud de Nayarit`;
           </SpaceBetween>
           </div>
         </ContentLayout>
+        </div>
       }
       />
     </div>
+    </>
   );
 }
 

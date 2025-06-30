@@ -27,20 +27,24 @@ class AgenteContactos:
         if not os.path.exists(self.download_path):
             os.makedirs(self.download_path)
         
-        # Palabras clave específicas para encontrar directorios
+        # Palabras clave específicas para encontrar directorios de empleados
         self.palabras_directorio = [
             'organigrama', 'directorio', 'directorio institucional',
             'funcionarios', 'autoridades', 'personal directivo',
             'estructura organizacional', 'quien es quien',
             'conocenos', 'conozcanos', 'quienes somos',
             'estructura administrativa', 'gobierno',
-            'directorio telefonico', 'staff'
+            'directorio telefonico', 'staff', 'personal',
+            'directorio de funcionarios', 'directorio de personal',
+            'estructura orgánica', 'servidores públicos'
         ]
         
-        # Palabras a evitar (contacto general)
+        # Palabras a evitar (contacto general de la secretaría)
         self.palabras_evitar = [
             'contacto', 'contactanos', 'atencion al publico',
-            'tramites', 'servicios', 'quejas', 'sugerencias'
+            'tramites', 'servicios', 'quejas', 'sugerencias',
+            'contacto general', 'información general',
+            'atención ciudadana', 'mesa de ayuda'
         ]
         
         # Patrones de extracción
@@ -120,11 +124,9 @@ class AgenteContactos:
                 EC.presence_of_element_located((By.NAME, "q"))
             )
             
-            # Consultas progresivas
+            # Búsqueda simple solo con el nombre de la entidad
             consultas = [
-                f'"{nombre_entidad}" site:gob.mx',
-                f'{nombre_entidad} México oficial',
-                f'"{nombre_entidad}"'
+                f'{nombre_entidad}'
             ]
             
             for consulta in consultas:
@@ -135,23 +137,46 @@ class AgenteContactos:
                 search_box.send_keys(Keys.RETURN)
                 time.sleep(3)
                 
-                # Extraer primer resultado relevante
+                # Tomar el PRIMER resultado (generalmente es el correcto)
                 try:
                     resultados = driver.find_elements(By.CSS_SELECTOR, "h3")
-                    for resultado in resultados[:5]:
+                    if resultados:
+                        primer_resultado = resultados[0]
+                        try:
+                            link = primer_resultado.find_element(By.XPATH, "./ancestor::a")
+                            url = link.get_attribute("href")
+                            titulo = primer_resultado.text
+                            
+                            print(f"   📋 Primer resultado: '{titulo}'")
+                            print(f"   🔗 URL: {url}")
+                            
+                            # Validar que sea una URL válida
+                            if url and not any(x in url for x in ['youtube.com', 'facebook.com', 'twitter.com']):
+                                url_limpia = self.limpiar_url_google(url)
+                                print(f"   ✅ Seleccionando primer resultado: {url_limpia}")
+                                return url_limpia
+                                
+                        except Exception as e:
+                            print(f"   ⚠️ Error procesando primer resultado: {e}")
+                            
+                    # Si el primer resultado falla, probar los siguientes
+                    print("   🔄 Primer resultado falló, probando siguientes...")
+                    for i, resultado in enumerate(resultados[1:4], 2):
                         try:
                             link = resultado.find_element(By.XPATH, "./ancestor::a")
                             url = link.get_attribute("href")
                             titulo = resultado.text
                             
                             if self.es_url_relevante(url, titulo, nombre_entidad):
-                                print(f"   ✅ URL encontrada: {url}")
-                                return self.limpiar_url_google(url)
+                                url_limpia = self.limpiar_url_google(url)
+                                print(f"   ✅ Resultado #{i} seleccionado: {url_limpia}")
+                                return url_limpia
                                 
                         except Exception:
                             continue
-                except Exception:
-                    continue
+                            
+                except Exception as e:
+                    print(f"   ❌ Error obteniendo resultados: {e}")
             
             return None
             
@@ -170,20 +195,27 @@ class AgenteContactos:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
             
-            query = f"{nombre_entidad} site:gob.mx"
+            query = f"{nombre_entidad}"
             url = f"https://www.google.com/search?q={query}"
             
             response = requests.get(url, headers=headers)
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Buscar enlaces en resultados
+            # Buscar primer enlace válido en resultados
+            enlaces_encontrados = []
             for link in soup.find_all('a', href=True):
                 href = link['href']
                 if '/url?q=' in href:
                     url_real = href.split('/url?q=')[1].split('&')[0]
-                    if self.es_url_relevante(url_real, link.text, nombre_entidad):
-                        print(f"   ✅ URL encontrada con requests: {url_real}")
-                        return url_real
+                    if url_real and not any(x in url_real for x in ['youtube.com', 'facebook.com', 'twitter.com']):
+                        enlaces_encontrados.append((url_real, link.text))
+            
+            # Tomar el primer enlace válido
+            if enlaces_encontrados:
+                url_real, titulo = enlaces_encontrados[0]
+                print(f"   📋 Primer resultado (requests): '{titulo[:50]}...'")
+                print(f"   ✅ URL seleccionada: {url_real}")
+                return url_real
             
             return None
             
@@ -221,17 +253,12 @@ class AgenteContactos:
         
         contactos_totales = []
         
-        # Paso 1: Analizar página principal
-        print("📄 Analizando página principal...")
-        contactos_main = self.analizar_pagina_principal(url_base)
-        contactos_totales.extend(contactos_main)
-        
-        # Paso 2: Buscar enlaces específicos de directorio
+        # Paso 1: Buscar enlaces específicos de directorio PRIMERO (evitar contacto general)
         print("🔗 Buscando enlaces de directorio/organigrama...")
         enlaces_directorio = self.encontrar_enlaces_directorio_avanzado(url_base)
         
-        # Paso 3: Explorar cada enlace encontrado
-        for enlace in enlaces_directorio[:8]:  # Limitar a 8 enlaces
+        # Paso 2: Explorar cada enlace encontrado
+        for enlace in enlaces_directorio[:5]:  # Limitar a 5 enlaces
             print(f"\n📂 Explorando: {enlace['texto']}")
             
             if enlace['tipo'] == 'pdf':
@@ -243,6 +270,12 @@ class AgenteContactos:
             else:
                 contactos_html = self.procesar_pagina_directorio(enlace['url'])
                 contactos_totales.extend(contactos_html)
+        
+        # Paso 3: Solo si no encontramos nada, analizar página principal
+        if not contactos_totales:
+            print("📄 No se encontraron directorios específicos, analizando página principal...")
+            contactos_main = self.analizar_pagina_principal(url_base)
+            contactos_totales.extend(contactos_main)
         
         # Procesar y filtrar contactos
         if contactos_totales:

@@ -272,9 +272,10 @@ class AgenteTransparencia:
             print("❌ No se encontraron opciones en el dropdown")
             return None, None, 0
         
-        print(f"📊 Total opciones: {len(set(todas_opciones))}")
+        print(f"📊 Total opciones analizadas: {len(set(todas_opciones))}")
+        print(f"🎯 Buscando coincidencias exactas para: {institucion_buscada}")
         
-        # NUEVA LÓGICA: PRIORIZAR POR ESTADO DETECTADO
+        # NUEVA LÓGICA: PRIORIZAR POR ESTADO DETECTADO Y SIMILITUD MEJORADA
         if estado_detectado and abreviacion_esperada:
             print(f"\n🎯 BÚSQUEDA PRIORITARIA POR ESTADO: {estado_detectado.upper()} ({abreviacion_esperada})")
             print("="*80)
@@ -290,15 +291,32 @@ class AgenteTransparencia:
                     abrev_en_opcion = texto_opcion[:2]
                     
                     if abrev_en_opcion == abreviacion_esperada:
-                        # OPCIONES CON EL ESTADO CORRECTO (MÁXIMA PRIORIDAD)
-                        similitud = fuzz.ratio(institucion_buscada.lower(), texto_opcion.lower())
-                        opciones_estado_correcto.append((opciones_elementos[i], texto_opcion, similitud))
-                        print(f"   🎯 ESTADO CORRECTO: '{texto_opcion}' (similitud: {similitud}%)")
+                        # OPCIONES CON EL ESTADO CORRECTO - BUSCAR COINCIDENCIA EXACTA DE PALABRAS CLAVE
+                        institucion_palabras = set(institucion_buscada.lower().split())
+                        opcion_palabras = set(texto_opcion.lower().split())
+                        
+                        # Palabras clave importantes
+                        palabras_importantes = {'secretaria', 'educacion', 'salud', 'economia', 'desarrollo', 'social', 'trabajo'}
+                        
+                        # Contar coincidencias de palabras importantes
+                        coincidencias_importantes = len(institucion_palabras.intersection(opcion_palabras).intersection(palabras_importantes))
+                        
+                        # Si hay coincidencias de palabras importantes, dar prioridad
+                        if coincidencias_importantes > 0:
+                            similitud_final = 95 + coincidencias_importantes  # Prioridad alta
+                        else:
+                            # Usar similitud normal solo si no hay coincidencias importantes
+                            similitud_final = fuzz.token_sort_ratio(institucion_buscada.lower(), texto_opcion.lower())
+                        
+                        opciones_estado_correcto.append((opciones_elementos[i], texto_opcion, similitud_final))
+                        
+                        # Solo mostrar si tiene palabras importantes o similitud alta
+                        if coincidencias_importantes > 0 or similitud_final > 80:
+                            print(f"   🎯 ESTADO CORRECTO: '{texto_opcion}' (similitud: {similitud_final:.1f}%, palabras clave: {coincidencias_importantes})")
                     else:
-                        # Opciones con otro estado (baja prioridad)
+                        # Opciones con otro estado (baja prioridad) - NO MOSTRAR LOGS
                         similitud = fuzz.ratio(institucion_buscada.lower(), texto_opcion.lower())
                         opciones_estado_incorrecto.append((opciones_elementos[i], texto_opcion, similitud))
-                        print(f"   ⚠️ Estado incorrecto ({abrev_en_opcion}): '{texto_opcion}' (similitud: {similitud}%)")
                 else:
                     # Opciones sin estado
                     similitud = fuzz.ratio(institucion_buscada.lower(), texto_opcion.lower())
@@ -311,34 +329,38 @@ class AgenteTransparencia:
                 # Ordenar por similitud
                 opciones_estado_correcto.sort(key=lambda x: x[2], reverse=True)
                 
-                # Mostrar las mejores opciones del estado correcto
-                print("🏆 TOP OPCIONES DEL ESTADO CORRECTO:")
-                for j, (elemento, texto, similitud) in enumerate(opciones_estado_correcto[:3]):
-                    print(f"   {j+1}. '{texto}' (similitud: {similitud}%)")
+                # Mostrar solo las opciones con palabras clave importantes
+                opciones_relevantes = [opt for opt in opciones_estado_correcto if opt[2] > 90]
+                
+                if opciones_relevantes:
+                    print("🏆 OPCIONES CON PALABRAS CLAVE COINCIDENTES:")
+                    for j, (elemento, texto, similitud) in enumerate(opciones_relevantes[:3]):
+                        print(f"   {j+1}. '{texto}' (prioridad: {similitud:.1f})")
+                else:
+                    print("⚠️ No se encontraron opciones con palabras clave exactas")
+                    print("🔍 Mejores opciones por similitud general:")
+                    for j, (elemento, texto, similitud) in enumerate(opciones_estado_correcto[:2]):
+                        print(f"   {j+1}. '{texto}' (similitud: {similitud:.1f}%)")
                 
                 # Si la mejor opción del estado correcto tiene similitud decente, usarla
                 mejor_elemento, mejor_texto, mejor_similitud = opciones_estado_correcto[0]
                 
-                if mejor_similitud >= 40:  # Umbral más bajo para estado correcto
+                # Umbral diferenciado: alto para palabras clave, medio para similitud
+                umbral_minimo = 95 if mejor_similitud > 90 else 75
+                
+                if mejor_similitud >= umbral_minimo:
                     print(f"\n🎉 SELECCIONANDO OPCIÓN DEL ESTADO CORRECTO:")
                     print(f"   📝 Buscado: '{institucion_buscada}'")
                     print(f"   ✅ Encontrado: '{mejor_texto}'")
-                    print(f"   📊 Similitud: {mejor_similitud}%")
+                    print(f"   📊 Similitud: {mejor_similitud:.1f}%")
                     print(f"   🎯 Estado: {abreviacion_esperada} (CORRECTO)")
                     print("="*80)
                     return mejor_elemento, mejor_texto, mejor_similitud
                 else:
-                    print(f"⚠️ Similitud muy baja en estado correcto: {mejor_similitud}%")
+                    print(f"⚠️ Similitud insuficiente: {mejor_similitud:.1f}% (mínimo requerido: {umbral_minimo}%)")
+                    print(f"❌ RECHAZANDO - No hay coincidencia suficiente de palabras clave")
             
-            # Si no hay buenas opciones con el estado correcto, mostrar advertencia
-            if opciones_estado_incorrecto:
-                print(f"\n⚠️ ADVERTENCIA: Se encontraron opciones con otros estados:")
-                opciones_estado_incorrecto.sort(key=lambda x: x[2], reverse=True)
-                for j, (elemento, texto, similitud) in enumerate(opciones_estado_incorrecto[:3]):
-                    estado_inc = texto[:2]
-                    print(f"   {j+1}. '{texto}' (similitud: {similitud}%, estado: {estado_inc})")
-                
-                print(f"❌ ESTAS OPCIONES NO COINCIDEN CON EL ESTADO BUSCADO: {abreviacion_esperada}")
+            # Silenciar logs de estados incorrectos
         
         # BÚSQUEDA NORMAL (si no hay estado detectado o no hay opciones del estado correcto)
         print(f"\n🔍 BÚSQUEDA GENERAL (sin prioridad de estado)")
@@ -374,24 +396,35 @@ class AgenteTransparencia:
             except Exception as e:
                 continue
         
-        # RESULTADO FINAL
-        if mejor_resultado and mejor_similitud >= 45:
+        # RESULTADO FINAL CON VALIDACIÓN MEJORADA
+        if mejor_resultado and mejor_similitud >= 80:  # Umbral aumentado para evitar falsos positivos
             elemento, texto_encontrado, similitud = mejor_resultado
-            print(f"\n🏆 RESULTADO FINAL:")
+            
+            # Validación adicional si hay estado detectado
+            if estado_detectado and abreviacion_esperada:
+                if not texto_encontrado.startswith(abreviacion_esperada):
+                    print(f"\n❌ VALIDACIÓN FALLIDA:")
+                    print(f"   📝 Buscado: '{institucion_buscada}' (Estado: {estado_detectado})")
+                    print(f"   ⚠️ Encontrado: '{texto_encontrado}' (Estado incorrecto)")
+                    print(f"   📊 Similitud: {similitud}%")
+                    print(f"   🚫 RECHAZANDO por no coincidir con estado esperado: {abreviacion_esperada}")
+                    print("="*80)
+                    return None, None, 0
+            
+            print(f"\n🏆 RESULTADO FINAL VALIDADO:")
             print(f"   📝 Buscado: '{institucion_buscada}'")
             print(f"   ✅ Encontrado: '{texto_encontrado}'")
             print(f"   📊 Similitud: {similitud}%")
             
-            # Advertencia si se detectó un estado pero se eligió otra opción
             if estado_detectado:
-                if not texto_encontrado.startswith(abreviacion_esperada):
-                    print(f"   ⚠️ ADVERTENCIA: Se detectó estado '{estado_detectado}' ({abreviacion_esperada}) pero se eligió una opción diferente")
-                    print(f"   ⚠️ Verificar si '{texto_encontrado}' es realmente la institución correcta")
+                print(f"   🎯 Estado validado: {abreviacion_esperada} ✓")
             
             print("="*80)
             return elemento, texto_encontrado, similitud
         else:
-            print(f"❌ No se encontró coincidencia aceptable")
+            print(f"\n❌ No se encontró coincidencia aceptable")
+            if mejor_resultado:
+                print(f"   📊 Mejor similitud encontrada: {mejor_similitud}% (mínimo requerido: 70%)")
             print("="*80)
             return None, None, 0
 

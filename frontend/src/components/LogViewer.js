@@ -65,7 +65,7 @@ const LogViewer = ({ logs }) => {
           fontFamily: 'Amazon Ember, sans-serif',
           textTransform: 'uppercase'
         }}>
-          📋 ESTADO DE INVESTIGACIÓN
+          ESTADO DE INVESTIGACIÓN
         </h2>
       }
     >

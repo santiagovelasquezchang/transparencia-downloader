@@ -110,9 +110,62 @@ async def exportar_resultados(session_id: str):
     resultados = investigaciones_activas[session_id]['resultados']
     
     try:
+        from datetime import datetime
+        
+        def log_filtrado(message: str, tipo: str = "info"):
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'message': message,
+                'type': tipo
+            }
+            investigaciones_activas[session_id]['logs'].append(log_entry)
+        
+        # Exportar resultados normales
         filename = f"downloads/resumen_{session_id}.xlsx"
         coordinador.exportar_resultados(resultados, filename)
-        return {"message": "Resultados exportados", "filename": filename}
+        
+        # Filtrar contactos importantes con logs
+        from filtro_contactos import FiltroContactos
+        filtro = FiltroContactos()
+        
+        # Obtener nombres de instituciones procesadas
+        instituciones = [r.get('entidad', 'Entidad') for r in resultados]
+        
+        if instituciones:
+            log_filtrado("📋 Iniciando filtrado de contactos importantes...", "info")
+            log_filtrado(f"🏢 Procesando {len(instituciones)} instituciones", "info")
+            
+            archivo_filtrado = filtro.generar_reporte_filtrado(instituciones, log_filtrado)
+            
+            log_filtrado(f"✅ Filtrado completado: {os.path.basename(archivo_filtrado)}", "success")
+            
+            return {
+                "message": "Resultados exportados y filtrados", 
+                "filename": filename,
+                "archivo_filtrado": archivo_filtrado
+            }
+        else:
+            return {"message": "Resultados exportados", "filename": filename}
+            
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/filtrar-contactos")
+async def filtrar_contactos(request: dict):
+    """Filtra contactos importantes de las instituciones especificadas"""
+    try:
+        instituciones = request.get('instituciones', [])
+        
+        from filtro_contactos import FiltroContactos
+        filtro = FiltroContactos()
+        
+        archivo_filtrado = filtro.generar_reporte_filtrado(instituciones)
+        
+        return {
+            "message": "Contactos filtrados exitosamente",
+            "archivo": archivo_filtrado
+        }
+        
     except Exception as e:
         return {"error": str(e)}
 
