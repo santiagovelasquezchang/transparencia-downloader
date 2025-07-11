@@ -26,6 +26,7 @@ function App() {
   const [status, setStatus] = useState(null);
   const [logs, setLogs] = useState([]);
   const [isInvestigating, setIsInvestigating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const placeholderText = `Secretaría de Educación Pública
 Instituto Nacional Electoral
@@ -65,6 +66,8 @@ Secretaría de Salud de Nayarit`;
   const exportarResultados = async () => {
     if (!sessionId) return;
     
+    setIsExporting(true);
+    
     // Agregar log de inicio de exportación
     setLogs(prev => [...prev, {
       timestamp: new Date().toISOString(),
@@ -84,8 +87,16 @@ Secretaría de Salud de Nayarit`;
       if (response.archivo_filtrado) {
         setLogs(prev => [...prev, {
           timestamp: new Date().toISOString(),
-          message: `📋 Archivo filtrado: ${response.archivo_filtrado.split('/').pop()}`,
+          message: `📋 Archivo filtrado creado: ${response.archivo_filtrado.split('/').pop()}`,
           type: 'success'
+        }]);
+      }
+      
+      if (response.carpeta_busqueda) {
+        setLogs(prev => [...prev, {
+          timestamp: new Date().toISOString(),
+          message: `📂 Archivos guardados en: ${response.carpeta_busqueda.split('/').pop()}`,
+          type: 'info'
         }]);
       }
       
@@ -96,6 +107,8 @@ Secretaría de Salud de Nayarit`;
         message: `❌ Error en exportación: ${error.message}`,
         type: 'error'
       }]);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -270,15 +283,18 @@ Secretaría de Salud de Nayarit`;
                     onClick={iniciarInvestigacion}
                     disabled={isInvestigating || !entidades.trim()}
                     loading={isInvestigating}
+                    loadingText="Investigando..."
                   >
-                    INICIAR INVESTIGACIÓN DUAL
+                    {isInvestigating ? 'INVESTIGANDO...' : 'INICIAR INVESTIGACIÓN DUAL'}
                   </Button>
                   
                   <Button
                     onClick={exportarResultados}
-                    disabled={!status || status.status !== 'completado'}
+                    disabled={!status || status.status !== 'completado' || isExporting}
+                    loading={isExporting}
+                    loadingText="Exportando..."
                   >
-                    EXPORTAR Y FILTRAR CONTACTOS
+                    {isExporting ? 'EXPORTANDO...' : 'EXPORTAR Y FILTRAR CONTACTOS'}
                   </Button>
                 </SpaceBetween>
                 

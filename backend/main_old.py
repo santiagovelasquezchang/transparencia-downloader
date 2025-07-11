@@ -76,7 +76,7 @@ class TransparenciaContactosApp:
         
         subtitle_label = ctk.CTkLabel(
             header_frame,
-            text="Agente 1: Descarga Excel Directorio Transparencia | Agente 2: Contactos Web",
+            text="Filtra contactos estratégicos para adquisición de servicios AWS",
             font=ctk.CTkFont(size=16),
             text_color="#CCCCCC"
         )
@@ -84,7 +84,7 @@ class TransparenciaContactosApp:
         
         info_label = ctk.CTkLabel(
             header_frame,
-            text="Ambos agentes trabajan en paralelo para obtener información completa",
+            text="Identifica directores de tecnología, administración, finanzas e innovación",
             font=ctk.CTkFont(size=12),
             text_color="#AAAAAA"
         )
@@ -116,7 +116,7 @@ class TransparenciaContactosApp:
         
         info_label = ctk.CTkLabel(
             left_panel,
-            text="🤖 Agente 1: Valida nombres → Descarga Excel directorio (Transparencia)\n🌐 Agente 2: Busca página oficial → Extrae contactos adicionales",
+            text="🎯 Filtra contactos relevantes para adquisición de servicios AWS:\n• Directores de Tecnología, Administración, Finanzas e Innovación\n• Coordinadores y Jefes de áreas estratégicas",
             font=ctk.CTkFont(size=12),
             text_color=self.colors['dark_gray'],
             justify="left"
@@ -158,7 +158,7 @@ Secretaría de Salud"""
         
         self.btn_investigar = ctk.CTkButton(
             buttons_frame,
-            text="🚀 Iniciar Investigación Dual",
+            text="🚀 Iniciar Investigación AWS",
             font=ctk.CTkFont(size=18, weight="bold"),
             fg_color=self.colors['primary'],
             hover_color=self.colors['accent'],
@@ -169,19 +169,33 @@ Secretaría de Salud"""
         )
         self.btn_investigar.pack(pady=(0, 10))
         
-        self.btn_exportar = ctk.CTkButton(
+        # Frame para resultados AWS
+        self.frame_resultados = ctk.CTkScrollableFrame(
+            left_panel,
+            height=300,
+            fg_color="white",
+            corner_radius=8,
+            border_color=self.colors['primary'],
+            border_width=1
+        )
+        self.frame_resultados.pack(fill="x", padx=20, pady=(10, 0))
+        
+        self.btn_descargar = ctk.CTkButton(
             buttons_frame,
-            text="💾 Exportar Resultados Completos",
+            text="💾 Descargar Excel AWS",
             font=ctk.CTkFont(size=14),
             fg_color=self.colors['success'],
             hover_color="#045D4A",
             text_color="white",
             height=40,
             corner_radius=20,
-            command=self.exportar_resultados,
+            command=self.descargar_excel_aws,
             state="disabled"
         )
-        self.btn_exportar.pack()
+        self.btn_descargar.pack()
+        
+        # Variable para almacenar resultados
+        self.resultados_aws = None
         
         # Progress bar
         self.progress = ctk.CTkProgressBar(
@@ -288,7 +302,7 @@ Secretaría de Salud"""
         self.root.update()
         
     def iniciar_investigacion(self):
-        """Iniciar investigación con ambos agentes"""
+        """Iniciar investigación con filtrado AWS"""
         if self.is_placeholder:
             messagebox.showwarning("⚠️ Advertencia", "Por favor ingrese las entidades que desea investigar")
             return
@@ -297,95 +311,164 @@ Secretaría de Salud"""
         if not entidades_input:
             messagebox.showwarning("⚠️ Advertencia", "Por favor ingrese al menos una entidad")
             return
-            
-        entidades = [ent.strip() for ent in entidades_input.split('\n') if ent.strip()]
+        
+        # Limpiar resultados anteriores
+        self.limpiar_resultados()
         
         self.btn_investigar.configure(state="disabled", text="🔎 Investigando...")
+        self.btn_descargar.configure(state="disabled")
         self.progress.set(0)
-        self.resultados = []
         
         def investigar_thread():
             try:
-                self.log_message("🚀 Iniciando sistema de investigación dual", "info")
-                self.log_message("🤖 Agente 1: Plataforma Transparencia (Excel Directorio)", "info")
-                self.log_message("🌐 Agente 2: Búsqueda Web Contactos", "info")
+                self.log_message("🚀 Iniciando investigación AWS", "info")
                 self.update_status("🔍 Investigación en progreso...")
                 
-                total_entidades = len(entidades)
+                # Usar el nuevo método del coordinador
+                resultado = self.coordinador.investigar_multiples_entidades(entidades_input, self.log_message)
                 
-                for i, entidad in enumerate(entidades):
-                    self.log_message(f"\n🎯 === Investigando: {entidad} ===", "info")
+                if resultado.get('exito'):
+                    self.resultados_aws = resultado
                     
-                    # Investigar con ambos agentes en paralelo
-                    resultado = self.coordinador.investigar_entidad(entidad, self.log_message)
-                    self.resultados.append(resultado)
+                    # Mostrar resultados en la interfaz
+                    self.mostrar_resultados_aws(resultado)
                     
-                    # Actualizar progreso
-                    progreso = (i + 1) / total_entidades
-                    self.progress.set(progreso)
+                    # Habilitar botón de descarga
+                    self.btn_descargar.configure(state="normal")
                     
-                    # Resumen de esta entidad
-                    excel_ok = resultado['transparencia']['exito']
-                    web_ok = resultado['contactos']['exito']
+                    self.update_status("✅ Investigación completada - Contactos AWS listos")
                     
-                    self.log_message(f"📊 Resumen {entidad}:", "info")
-                    self.log_message(f"   📥 Excel Directorio: {'✅' if excel_ok else '❌'}", "success" if excel_ok else "error")
-                    self.log_message(f"   🌐 Contactos Web: {'✅' if web_ok else '❌'}", "success" if web_ok else "error")
-                
-                # Resumen final completo
-                self.log_message(f"\n🎉 ¡Investigación completada!", "success")
-                
-                excel_exitosos = sum(1 for r in self.resultados if r['transparencia']['exito'])
-                web_exitosos = sum(1 for r in self.resultados if r['contactos']['exito'])
-                archivos_excel = sum(1 for r in self.resultados if r['transparencia'].get('archivo_descargado'))
-                
-                self.log_message(f"📈 ESTADÍSTICAS FINALES:", "info")
-                self.log_message(f"   • Total entidades: {total_entidades}", "info")
-                self.log_message(f"   • Excel directorios descargados: {archivos_excel}/{total_entidades}", "success")
-                self.log_message(f"   • Páginas web analizadas: {web_exitosos}/{total_entidades}", "success")
-                self.log_message(f"   • Archivos en carpeta: downloads/", "info")
-                
-                self.update_status("✅ Investigación completada - Datos listos")
-                self.btn_exportar.configure(state="normal")
-                
-                messagebox.showinfo("🎉 Completado", 
-                                  f"¡Investigación completada!\n\n"
-                                  f"📊 Resultados:\n"
-                                  f"• Entidades: {total_entidades}\n"
-                                  f"• Excel descargados: {archivos_excel}\n"
-                                  f"• Web analizadas: {web_exitosos}\n\n"
-                                  f"📁 Archivos en: downloads/")
-                
+                    total_contactos = len(resultado.get('contactos_aws', []))
+                    messagebox.showinfo("🎉 Completado", 
+                                      f"¡Investigación AWS completada!\n\n"
+                                      f"🎯 Contactos AWS encontrados: {total_contactos}\n"
+                                      f"💾 Listo para descargar Excel")
+                else:
+                    self.log_message(f"💥 Error: {resultado.get('error', 'Error desconocido')}", "error")
+                    
             except Exception as e:
-                self.log_message(f"💥 Error crítico del sistema: {str(e)}", "error")
-                self.update_status("❌ Error crítico en la investigación")
+                self.log_message(f"💥 Error crítico: {str(e)}", "error")
+                self.update_status("❌ Error en la investigación")
                 messagebox.showerror("Error", f"Error durante la investigación:\n{str(e)}")
             finally:
-                self.btn_investigar.configure(state="normal", text="🚀 Iniciar Investigación Dual")
+                self.btn_investigar.configure(state="normal", text="🚀 Iniciar Investigación AWS")
                 
         threading.Thread(target=investigar_thread, daemon=True).start()
     
-    def exportar_resultados(self):
-        """Exportar resultados consolidados"""
-        if not self.resultados:
-            messagebox.showwarning("Advertencia", "No hay resultados para exportar")
+    def limpiar_resultados(self):
+        """Limpia los resultados anteriores"""
+        for widget in self.frame_resultados.winfo_children():
+            widget.destroy()
+    
+    def mostrar_resultados_aws(self, resultado):
+        """Muestra los contactos AWS filtrados en la interfaz"""
+        contactos_por_entidad = resultado.get('contactos_por_entidad', {})
+        
+        if not contactos_por_entidad:
+            label_sin_resultados = ctk.CTkLabel(
+                self.frame_resultados,
+                text="⚠️ No se encontraron contactos relevantes para AWS",
+                font=ctk.CTkFont(size=14),
+                text_color=self.colors['error']
+            )
+            label_sin_resultados.pack(pady=20)
             return
+        
+        # Título
+        titulo = ctk.CTkLabel(
+            self.frame_resultados,
+            text=f"🎯 Contactos AWS ({len(resultado.get('contactos_aws', []))} total)",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=self.colors['primary']
+        )
+        titulo.pack(pady=(10, 15))
+        
+        # Mostrar por entidad
+        for entidad, contactos in contactos_por_entidad.items():
+            # Frame para cada entidad
+            frame_entidad = ctk.CTkFrame(
+                self.frame_resultados,
+                fg_color=self.colors['light_gray'],
+                corner_radius=5
+            )
+            frame_entidad.pack(fill="x", padx=5, pady=3)
             
+            # Título de entidad
+            titulo_entidad = ctk.CTkLabel(
+                frame_entidad,
+                text=f"🏢 {entidad} ({len(contactos)} contactos)",
+                font=ctk.CTkFont(size=14, weight="bold"),
+                text_color=self.colors['secondary']
+            )
+            titulo_entidad.pack(pady=(8, 5), padx=10, anchor="w")
+            
+            # Mostrar primeros 3 contactos
+            for contacto in contactos[:3]:
+                info_contacto = f"👤 {contacto['nombre']} | 💼 {contacto['cargo']}\n📧 {contacto['email']} | 📞 {contacto['telefono']}"
+                
+                label_contacto = ctk.CTkLabel(
+                    frame_entidad,
+                    text=info_contacto,
+                    font=ctk.CTkFont(size=11),
+                    justify="left",
+                    anchor="w"
+                )
+                label_contacto.pack(pady=2, padx=15, anchor="w")
+                
+                # Relevancia
+                relevancia = contacto.get('relevancia_aws', 0)
+                color_relevancia = self.colors['success'] if relevancia >= 80 else self.colors['primary'] if relevancia >= 60 else self.colors['error']
+                
+                label_relevancia = ctk.CTkLabel(
+                    frame_entidad,
+                    text=f"🎯 {relevancia}%",
+                    font=ctk.CTkFont(size=10, weight="bold"),
+                    text_color=color_relevancia
+                )
+                label_relevancia.pack(pady=(0, 5), padx=15, anchor="e")
+            
+            # Si hay más contactos
+            if len(contactos) > 3:
+                label_mas = ctk.CTkLabel(
+                    frame_entidad,
+                    text=f"... y {len(contactos) - 3} contactos más",
+                    font=ctk.CTkFont(size=10, style="italic"),
+                    text_color=self.colors['dark_gray']
+                )
+                label_mas.pack(pady=(0, 8), padx=15)
+    
+    def descargar_excel_aws(self):
+        """Descarga el Excel con contactos AWS"""
+        if not self.resultados_aws:
+            messagebox.showwarning("Advertencia", "No hay resultados AWS para descargar")
+            return
+        
         try:
-            filename = filedialog.asksaveasfilename(
-                defaultextension=".xlsx",
-                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
-                title="Guardar resumen de investigación"
+            # Crear carpeta de descarga
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            carpeta_descarga = os.path.join(os.path.expanduser("~/Downloads"), f"AWS_Contactos_{timestamp}")
+            os.makedirs(carpeta_descarga, exist_ok=True)
+            
+            # Generar Excel
+            archivo_excel = self.coordinador.generar_excel_aws(
+                self.resultados_aws['contactos_por_entidad'],
+                carpeta_descarga
             )
             
-            if filename:
-                self.coordinador.exportar_resultados(self.resultados, filename)
-                self.log_message(f"💾 Resumen exportado: {filename}", "success")
-                messagebox.showinfo("Exportado", f"Resumen guardado en:\n{filename}\n\nLos Excel individuales están en: downloads/")
+            self.log_message(f"💾 Excel AWS generado: {os.path.basename(archivo_excel)}", "success")
+            
+            # Abrir carpeta
+            if os.name == 'nt':  # Windows
+                os.startfile(carpeta_descarga)
+            
+            messagebox.showinfo("Descarga Completa", 
+                              f"Excel AWS generado exitosamente:\n\n"
+                              f"📁 Carpeta: {carpeta_descarga}\n"
+                              f"💾 Archivo: {os.path.basename(archivo_excel)}")
                 
         except Exception as e:
-            self.log_message(f"Error exportando: {str(e)}", "error")
-            messagebox.showerror("Error", f"Error al exportar:\n{str(e)}")
+            self.log_message(f"Error generando Excel: {str(e)}", "error")
+            messagebox.showerror("Error", f"Error al generar Excel:\n{str(e)}")
     
     def run(self):
         """Ejecutar la aplicación"""

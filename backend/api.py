@@ -24,6 +24,20 @@ app.add_middleware(
 investigaciones_activas = {}
 coordinador = Coordinador()
 
+def crear_carpeta_busqueda():
+    """Crea carpeta única para cada búsqueda en Downloads del usuario"""
+    from datetime import datetime
+    import os
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Obtener carpeta Downloads del usuario
+    downloads_usuario = os.path.join(os.path.expanduser("~"), "Downloads")
+    carpeta_busqueda = os.path.join(downloads_usuario, f"AWS_VELCH_busqueda_{timestamp}")
+    
+    os.makedirs(carpeta_busqueda, exist_ok=True)
+    return carpeta_busqueda
+
 class InvestigacionRequest(BaseModel):
     entidades: List[str]
     session_id: str
@@ -33,6 +47,9 @@ async def iniciar_investigacion(request: InvestigacionRequest, background_tasks:
     """Inicia investigación en background"""
     session_id = request.session_id
     
+    # Crear carpeta única para esta búsqueda
+    carpeta_busqueda = crear_carpeta_busqueda()
+    
     # Inicializar estado de la investigación
     investigaciones_activas[session_id] = {
         'status': 'iniciando',
@@ -40,7 +57,8 @@ async def iniciar_investigacion(request: InvestigacionRequest, background_tasks:
         'logs': [],
         'resultados': [],
         'total_entidades': len(request.entidades),
-        'entidades_procesadas': 0
+        'entidades_procesadas': 0,
+        'carpeta_busqueda': carpeta_busqueda
     }
     
     # Ejecutar investigación en background
@@ -63,6 +81,11 @@ async def ejecutar_investigacion(entidades: List[str], session_id: str):
             investigaciones_activas[session_id]['logs'].append(log_entry)
         
         total_entidades = len(entidades)
+        
+        # Configurar carpeta de búsqueda para los agentes
+        carpeta_busqueda = investigaciones_activas[session_id]['carpeta_busqueda']
+        coordinador.agente_transparencia.set_download_path(carpeta_busqueda)
+        coordinador.agente_contactos.set_download_path(carpeta_busqueda)
         
         for i, entidad in enumerate(entidades):
             log_callback(f"Investigando: {entidad}", "info")
@@ -120,8 +143,11 @@ async def exportar_resultados(session_id: str):
             }
             investigaciones_activas[session_id]['logs'].append(log_entry)
         
+        # Usar carpeta de búsqueda específica
+        carpeta_busqueda = investigaciones_activas[session_id].get('carpeta_busqueda', 'downloads')
+        
         # Exportar resultados normales
-        filename = f"downloads/resumen_{session_id}.xlsx"
+        filename = f"{carpeta_busqueda}/resumen_{session_id}.xlsx"
         coordinador.exportar_resultados(resultados, filename)
         
         # Filtrar contactos importantes con logs
@@ -134,15 +160,22 @@ async def exportar_resultados(session_id: str):
         if instituciones:
             log_filtrado("📋 Iniciando filtrado de contactos importantes...", "info")
             log_filtrado(f"🏢 Procesando {len(instituciones)} instituciones", "info")
+            log_filtrado("🔍 Analizando archivos CSV de ambos agentes...", "info")
+            log_filtrado("⚙️ Aplicando filtros de cargos importantes...", "info")
             
+            # Pasar carpeta de búsqueda al filtro
+            filtro.download_path = carpeta_busqueda
             archivo_filtrado = filtro.generar_reporte_filtrado(instituciones, log_filtrado)
             
-            log_filtrado(f"✅ Filtrado completado: {os.path.basename(archivo_filtrado)}", "success")
+            log_filtrado(f"✅ Filtrado completado exitosamente", "success")
+            log_filtrado(f"📁 Archivo guardado: {os.path.basename(archivo_filtrado)}", "info")
+            log_filtrado(f"📂 Ubicación: {os.path.dirname(archivo_filtrado)}", "info")
             
             return {
-                "message": "Resultados exportados y filtrados", 
+                "message": "Resultados exportados y filtrados exitosamente", 
                 "filename": filename,
-                "archivo_filtrado": archivo_filtrado
+                "archivo_filtrado": archivo_filtrado,
+                "carpeta_busqueda": carpeta_busqueda
             }
         else:
             return {"message": "Resultados exportados", "filename": filename}

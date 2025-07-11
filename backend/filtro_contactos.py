@@ -238,7 +238,9 @@ class FiltroContactos:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         archivo_salida = os.path.join(self.download_path, f"contactos_filtrados_{timestamp}.xlsx")
         
-        log_callback(f"📁 Creando archivo: contactos_filtrados_{timestamp}.xlsx", "info")
+        log_callback(f"📁 Creando archivo Excel: contactos_filtrados_{timestamp}.xlsx", "info")
+        log_callback(f"🔍 Leyendo archivos CSV de transparencia y web...", "info")
+        log_callback(f"🔄 Eliminando contactos duplicados...", "info")
         
         with pd.ExcelWriter(archivo_salida, engine='openpyxl') as writer:
             # Hoja resumen
@@ -290,18 +292,24 @@ class FiltroContactos:
                 if not df_tecnologia.empty:
                     df_tecnologia.to_excel(writer, sheet_name='Cargos_Tecnologia', index=False)
         
-        log_callback(f"💾 Reporte Excel generado exitosamente", "success")
-        log_callback(f"📁 Ubicación: downloads/{os.path.basename(archivo_salida)}", "info")
-        log_callback(f"📊 Total contactos filtrados: {len(todos_contactos)}", "info")
-        log_callback(f"🏢 Cargos empresariales: {len([c for c in todos_contactos if c.get('tipo_cargo') == 'empresarial'])}", "info")
-        log_callback(f"💻 Cargos tecnología: {len([c for c in todos_contactos if c.get('tipo_cargo') == 'tecnologia'])}", "info")
+        # Estadísticas finales
+        total_empresariales = len([c for c in todos_contactos if c.get('tipo_cargo') == 'empresarial'])
+        total_tecnologia = len([c for c in todos_contactos if c.get('tipo_cargo') == 'tecnologia'])
+        
+        log_callback(f"💾 Archivo Excel generado exitosamente", "success")
+        log_callback(f"📁 Nombre: {os.path.basename(archivo_salida)}", "info")
+        log_callback(f"📊 Total contactos importantes: {len(todos_contactos)}", "success")
+        log_callback(f"🏢 Cargos empresariales: {total_empresariales}", "info")
+        log_callback(f"💻 Cargos tecnología: {total_tecnologia}", "info")
+        log_callback(f"📂 Hojas creadas: Resumen, Todos_Contactos, Cargos_Empresariales, Cargos_Tecnologia", "info")
         
         print(f"📊 Reporte generado: {archivo_salida}")
-        print(f"📁 Ubicación completa: {os.path.abspath(archivo_salida)}")
-        print(f"📊 Resumen:")
-        print(f"   - Total instituciones: {len(instituciones)}")
-        print(f"   - Total contactos importantes: {len(todos_contactos)}")
-        print(f"   - Cargos empresariales: {len([c for c in todos_contactos if c.get('tipo_cargo') == 'empresarial'])}")
-        print(f"   - Cargos tecnología: {len([c for c in todos_contactos if c.get('tipo_cargo') == 'tecnologia'])}")
+        print(f"📁 Ubicación: {os.path.abspath(archivo_salida)}")
+        print(f"📊 Resumen del filtrado:")
+        print(f"   - Instituciones procesadas: {len(instituciones)}")
+        print(f"   - Contactos importantes encontrados: {len(todos_contactos)}")
+        print(f"   - Cargos empresariales: {total_empresariales}")
+        print(f"   - Cargos tecnología: {total_tecnologia}")
+        print(f"   - Archivos CSV procesados: {sum(len(os.listdir(self.download_path)) for _ in [1] if os.path.exists(self.download_path))}")
         
         return archivo_salida

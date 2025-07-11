@@ -80,6 +80,12 @@ class AgenteTransparencia:
             'EDO MEX': 'estado de mexico'
         })
     
+    def set_download_path(self, new_path):
+        """Actualiza la ruta de descarga"""
+        self.download_path = os.path.abspath(new_path)
+        if not os.path.exists(self.download_path):
+            os.makedirs(self.download_path)
+    
     def detectar_y_convertir_estado(self, institucion_texto):
         """
         FUNCIÓN CORREGIDA: Mejor detección de estados
@@ -168,265 +174,314 @@ class AgenteTransparencia:
         return variaciones_limpias
     
     def crear_driver_anti_deteccion(self, headless=False):
-        """Crea un driver de Chrome configurado para la página (sin verificación de seguridad)."""
+        """Configuración simple que funcionaba antes"""
         
         options = Options()
         
-        # Configuraciones básicas
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("--exclude-switches=enable-automation")
-        options.add_argument("--useAutomationExtension=false")
+        # Solo las configuraciones básicas que funcionaban
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--disable-logging")
-        options.add_argument("--log-level=3")
-        options.add_argument("--silent")
-        
-        # User agent real de Chrome
-        options.add_argument("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-        
-        options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
-        options.add_experimental_option('useAutomationExtension', False)
         
         if headless:
             options.add_argument("--headless=new")
         
-        # Crear driver
+        # Crear driver simple
         driver = webdriver.Chrome(options=options)
-        
-        # Configurar viewport
-        if not headless:
-            driver.set_window_size(1366, 768)
-        
-        # JavaScript básico para ocultar automatización
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        driver.set_window_size(1366, 768)
         
         return driver
 
-    def encontrar_opcion_mas_similar(self, driver, wait, institucion_buscada):
-        """
-        FUNCIÓN CORREGIDA: Prioriza ESTADO detectado sobre similitud general
-        """
-        print(f"🔍 Búsqueda inteligente para: '{institucion_buscada}'")
-        print("="*80)
+    def busqueda_inteligente_estado(self, texto_usuario, opciones_disponibles):
+        """Búsqueda flexible por estado y palabras clave"""
+        import unicodedata
         
-        # Generar variaciones con estados
-        variaciones_busqueda = self.detectar_y_convertir_estado(institucion_buscada)
+        def normalizar_texto(texto):
+            """Normaliza texto removiendo acentos y convirtiendo a minúsculas"""
+            texto = unicodedata.normalize('NFD', texto)
+            texto = ''.join(c for c in texto if unicodedata.category(c) != 'Mn')
+            return texto.lower().strip()
         
-        # DETECTAR ESTADO ESPECÍFICO EN LA BÚSQUEDA ORIGINAL
+        texto_normalizado = normalizar_texto(texto_usuario)
+        
+        # 1. DETECTAR ESTADO
         estado_detectado = None
-        abreviacion_esperada = None
+        codigo_estado = None
         
-        for estado_completo, abreviacion in self.estados_mexico.items():
-            if estado_completo in institucion_buscada.lower():
-                estado_detectado = estado_completo
-                abreviacion_esperada = abreviacion
-                print(f"🎯 ESTADO DETECTADO: '{estado_completo}' -> Abreviación esperada: '{abreviacion}'")
+        for estado, codigo in self.estados_mexico.items():
+            estado_norm = normalizar_texto(estado)
+            if estado_norm in texto_normalizado:
+                estado_detectado = estado
+                codigo_estado = codigo
                 break
         
-        # Estrategias para encontrar las opciones del bootstrap-select
-        opciones_estrategias = [
-            (By.CSS_SELECTOR, ".bootstrap-select .dropdown-menu li a"),
-            (By.CSS_SELECTOR, ".dropdown-menu li a span.text"),
-            (By.CSS_SELECTOR, ".bootstrap-select .dropdown-menu a"),
-            (By.CSS_SELECTOR, ".open .dropdown-menu li"),
-            (By.XPATH, "//div[contains(@class, 'bootstrap-select')]//ul//li//a"),
-            (By.XPATH, "//ul[contains(@class, 'dropdown-menu')]//li//a")
-        ]
+        if not estado_detectado:
+            return None, None, []
         
+        print(f"🎯 Estado: '{estado_detectado}' -> '{codigo_estado}'")
+        
+        # 2. EXTRAER PALABRAS CLAVE DEL TEXTO (MÁS FLEXIBLE)
+        palabras_importantes = {
+            'economia': ['economia', 'economico', 'economica'],
+            'educacion': ['educacion', 'educativo', 'educativa'],
+            'salud': ['salud', 'sanitario', 'sanitaria'],
+            'desarrollo': ['desarrollo'],
+            'trabajo': ['trabajo', 'laboral'],
+            'turismo': ['turismo', 'turistico', 'turistica'],
+            'agricultura': ['agricultura', 'agricola'],
+            'planeacion': ['planeacion', 'planeamiento'],
+            'finanzas': ['finanzas', 'financiero', 'financiera'],
+            'bienestar': ['bienestar'],
+            'administracion': ['administracion', 'administrativo', 'administrativa'],
+            'seguridad': ['seguridad'],
+            'comunicaciones': ['comunicaciones', 'comunicacion'],
+            'movilidad': ['movilidad', 'transporte']
+        }
+        
+        palabras_encontradas = []
+        for palabra_base, variantes in palabras_importantes.items():
+            for variante in variantes:
+                if normalizar_texto(variante) in texto_normalizado:
+                    if palabra_base not in palabras_encontradas:
+                        palabras_encontradas.append(palabra_base)
+                    break
+        
+        if not palabras_encontradas:
+            print(f"❌ No se encontraron palabras clave en: '{texto_usuario}'")
+            return None, None, []
+        
+        print(f"🎯 Palabras clave encontradas: {palabras_encontradas}")
+        
+        # 3. BUSCAR OPCIONES DEL ESTADO CORRECTO
+        opciones_estado = []
+        
+        for opcion in opciones_disponibles:
+            if opcion.startswith(codigo_estado + " - "):
+                opciones_estado.append(opcion)
+        
+        print(f"📊 Opciones encontradas para {codigo_estado}: {len(opciones_estado)}")
+        
+        # 4. LÓGICA SIMPLE: Si solo hay 1 opción, esa es la correcta
+        if len(opciones_estado) == 1:
+            print(f"✅ Única opción encontrada: '{opciones_estado[0]}'")
+            return estado_detectado, codigo_estado, [(opciones_estado[0], 100)]
+        
+        # 5. Si hay múltiples opciones, filtrar por palabras clave
+        coincidencias = []
+        
+        for opcion in opciones_estado:
+            opcion_norm = normalizar_texto(opcion)
+            
+            # Contar palabras clave que coinciden
+            coincidencias_palabras = 0
+            for palabra in palabras_encontradas:
+                if palabra in opcion_norm:
+                    coincidencias_palabras += 1
+            
+            # Si coincide al menos una palabra clave
+            if coincidencias_palabras > 0:
+                # Similitud base + bonus por palabras
+                similitud_base = fuzz.token_sort_ratio(texto_normalizado, opcion_norm)
+                bonus = coincidencias_palabras * 25
+                similitud_final = min(100, similitud_base + bonus)
+                
+                coincidencias.append((opcion, similitud_final))
+                print(f"   ✅ '{opcion}' -> {similitud_final}%")
+        
+        # 6. Si no hay coincidencias por palabras clave, tomar la más similar
+        if not coincidencias and opciones_estado:
+            print(f"⚠️ No hay coincidencias por palabras clave, usando similitud general")
+            for opcion in opciones_estado:
+                similitud = fuzz.token_sort_ratio(texto_normalizado, normalizar_texto(opcion))
+                if similitud >= 40:  # Umbral muy bajo para casos parciales
+                    coincidencias.append((opcion, similitud))
+                    print(f"   🔄 '{opcion}' -> {similitud}%")
+        
+        # 7. ORDENAR por similitud
+        coincidencias.sort(key=lambda x: x[1], reverse=True)
+        
+        return estado_detectado, codigo_estado, coincidencias
+    
+    def buscar_con_autocompletado(self, driver, wait, institucion):
+        """Busca usando el campo de autocompletado de la página"""
+        try:
+            print(f"🔍 Intentando autocompletado para: '{institucion}'")
+            
+            # Buscar el campo de entrada de texto
+            campo_busqueda = None
+            selectores_busqueda = [
+                ".bootstrap-select input[type='text']",
+                ".bootstrap-select .bs-searchbox input",
+                "input.form-control",
+                ".dropdown-menu input",
+                "input[placeholder*='buscar']",
+                "input[placeholder*='Buscar']"
+            ]
+            
+            for selector in selectores_busqueda:
+                try:
+                    campo_busqueda = driver.find_element(By.CSS_SELECTOR, selector)
+                    if campo_busqueda.is_displayed():
+                        print(f"✅ Campo de autocompletado encontrado")
+                        break
+                except:
+                    continue
+            
+            if not campo_busqueda:
+                print("❌ No se encontró campo de autocompletado")
+                return None, None, 0
+            
+            # Detectar estado y construir términos de búsqueda
+            estado_detectado, codigo_estado, _ = self.busqueda_inteligente_estado(institucion, [])
+            
+            if not codigo_estado:
+                print("❌ No se detectó estado")
+                return None, None, 0
+            
+            # Extraer palabras clave
+            palabras_clave = self.extraer_palabras_principales(institucion)
+            
+            # Construir términos de búsqueda progresivos
+            terminos_busqueda = [f"{codigo_estado} - Secretaria"]
+            
+            if palabras_clave:
+                # Agregar búsqueda con primera palabra parcial
+                terminos_busqueda.append(f"{codigo_estado} - Secretaria de {palabras_clave[0][:3]}")
+                # Agregar búsqueda con primera palabra completa
+                terminos_busqueda.append(f"{codigo_estado} - Secretaria de {palabras_clave[0]}")
+            
+            # Probar cada término
+            for i, termino in enumerate(terminos_busqueda):
+                print(f"🔍 Probando: '{termino}'")
+                
+                # Escribir en el campo
+                campo_busqueda.clear()
+                campo_busqueda.send_keys(termino)
+                time.sleep(3)  # Esperar filtrado
+                
+                # Obtener opciones filtradas
+                opciones_filtradas = self.obtener_opciones_filtradas(driver)
+                
+                if opciones_filtradas:
+                    print(f"📊 Opciones filtradas: {len(opciones_filtradas)}")
+                    
+                    # Si solo hay 1 opción
+                    if len(opciones_filtradas) == 1:
+                        elemento, texto = opciones_filtradas[0]
+                        print(f"✅ Única opción: '{texto}'")
+                        return elemento, texto, 100
+                    
+                    # Si hay múltiples, seleccionar la mejor
+                    mejor_elemento, mejor_texto, mejor_similitud = self.seleccionar_mejor_filtrada(opciones_filtradas, institucion)
+                    
+                    if mejor_similitud >= 60:
+                        print(f"✅ Mejor opción: '{mejor_texto}' ({mejor_similitud}%)")
+                        return mejor_elemento, mejor_texto, mejor_similitud
+            
+            print("❌ Autocompletado no encontró resultados")
+            return None, None, 0
+            
+        except Exception as e:
+            print(f"❌ Error en autocompletado: {e}")
+            return None, None, 0
+    
+    def obtener_opciones_filtradas(self, driver):
+        """Obtiene opciones visibles del dropdown filtrado"""
+        opciones = []
+        try:
+            elementos = driver.find_elements(By.CSS_SELECTOR, ".bootstrap-select .dropdown-menu li:not(.hidden) a")
+            for elemento in elementos:
+                if elemento.is_displayed():
+                    texto = elemento.text.strip()
+                    if texto and len(texto) > 5:
+                        opciones.append((elemento, texto))
+        except:
+            pass
+        return opciones
+    
+    def seleccionar_mejor_filtrada(self, opciones_filtradas, institucion_original):
+        """Selecciona la opción más similar"""
+        mejor_elemento, mejor_texto, mejor_similitud = None, "", 0
+        
+        for elemento, texto in opciones_filtradas:
+            similitud = fuzz.token_sort_ratio(institucion_original.lower(), texto.lower())
+            print(f"   📊 '{texto}' -> {similitud}%")
+            
+            if similitud > mejor_similitud:
+                mejor_similitud = similitud
+                mejor_texto = texto
+                mejor_elemento = elemento
+        
+        return mejor_elemento, mejor_texto, mejor_similitud
+    
+    def extraer_palabras_principales(self, texto):
+        """Extrae palabras clave del texto"""
+        palabras = ['economia', 'educacion', 'salud', 'desarrollo', 'trabajo', 'turismo', 
+                   'agricultura', 'planeacion', 'finanzas', 'bienestar', 'administracion']
+        
+        texto_lower = texto.lower()
+        encontradas = []
+        
+        for palabra in palabras:
+            if palabra in texto_lower:
+                encontradas.append(palabra)
+        
+        return encontradas
+    
+    def encontrar_opcion_mas_similar(self, driver, wait, institucion_buscada):
+        """Función tradicional como fallback"""
+        print(f"🔍 Búsqueda tradicional para: '{institucion_buscada}'")
+        print("="*80)
+        
+        # Obtener todas las opciones del dropdown
         todas_opciones = []
         opciones_elementos = []
         
-        # Recopilar todas las opciones disponibles
-        for estrategia in opciones_estrategias:
-            try:
-                opciones = wait.until(EC.presence_of_all_elements_located(estrategia))
-                print(f"📝 Encontradas {len(opciones)} opciones")
-                
-                for opcion in opciones:
-                    try:
-                        texto_opcion = opcion.text.strip()
-                        if not texto_opcion:
-                            try:
-                                span_texto = opcion.find_element(By.CSS_SELECTOR, "span.text")
-                                texto_opcion = span_texto.text.strip()
-                            except:
-                                continue
-                        
-                        if texto_opcion and len(texto_opcion) > 3:
-                            todas_opciones.append(texto_opcion)
-                            opciones_elementos.append(opcion)
-                            
-                    except Exception:
-                        continue
-                
-                if todas_opciones:
-                    break
+        try:
+            opciones = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".bootstrap-select .dropdown-menu li a")))
+            
+            for opcion in opciones:
+                try:
+                    texto_opcion = opcion.text.strip()
+                    if texto_opcion and len(texto_opcion) > 3:
+                        todas_opciones.append(texto_opcion)
+                        opciones_elementos.append(opcion)
+                except:
+                    continue
                     
-            except Exception as e:
-                print(f"⚠️ Error con estrategia: {e}")
-                continue
+        except Exception as e:
+            print(f"❌ Error obteniendo opciones: {e}")
+            return None, None, 0
         
         if not todas_opciones:
-            print("❌ No se encontraron opciones en el dropdown")
             return None, None, 0
         
-        print(f"📊 Total opciones analizadas: {len(set(todas_opciones))}")
-        print(f"🎯 Buscando coincidencias exactas para: {institucion_buscada}")
+        # USAR BÚSQUEDA INTELIGENTE
+        estado, codigo, coincidencias = self.busqueda_inteligente_estado(institucion_buscada, todas_opciones)
         
-        # NUEVA LÓGICA: PRIORIZAR POR ESTADO DETECTADO Y SIMILITUD MEJORADA
-        if estado_detectado and abreviacion_esperada:
-            print(f"\n🎯 BÚSQUEDA PRIORITARIA POR ESTADO: {estado_detectado.upper()} ({abreviacion_esperada})")
-            print("="*80)
-            
-            # Buscar opciones que empiecen con la abreviación esperada
-            opciones_estado_correcto = []
-            opciones_estado_incorrecto = []
-            opciones_sin_estado = []
-            
-            for i, texto_opcion in enumerate(todas_opciones):
-                # Verificar si empieza con abreviación de estado
-                if re.match(r'^[A-Z]{2}\s*-', texto_opcion):
-                    abrev_en_opcion = texto_opcion[:2]
-                    
-                    if abrev_en_opcion == abreviacion_esperada:
-                        # OPCIONES CON EL ESTADO CORRECTO - BUSCAR COINCIDENCIA EXACTA DE PALABRAS CLAVE
-                        institucion_palabras = set(institucion_buscada.lower().split())
-                        opcion_palabras = set(texto_opcion.lower().split())
-                        
-                        # Palabras clave importantes
-                        palabras_importantes = {'secretaria', 'educacion', 'salud', 'economia', 'desarrollo', 'social', 'trabajo'}
-                        
-                        # Contar coincidencias de palabras importantes
-                        coincidencias_importantes = len(institucion_palabras.intersection(opcion_palabras).intersection(palabras_importantes))
-                        
-                        # Si hay coincidencias de palabras importantes, dar prioridad
-                        if coincidencias_importantes > 0:
-                            similitud_final = 95 + coincidencias_importantes  # Prioridad alta
-                        else:
-                            # Usar similitud normal solo si no hay coincidencias importantes
-                            similitud_final = fuzz.token_sort_ratio(institucion_buscada.lower(), texto_opcion.lower())
-                        
-                        opciones_estado_correcto.append((opciones_elementos[i], texto_opcion, similitud_final))
-                        
-                        # Solo mostrar si tiene palabras importantes o similitud alta
-                        if coincidencias_importantes > 0 or similitud_final > 80:
-                            print(f"   🎯 ESTADO CORRECTO: '{texto_opcion}' (similitud: {similitud_final:.1f}%, palabras clave: {coincidencias_importantes})")
-                    else:
-                        # Opciones con otro estado (baja prioridad) - NO MOSTRAR LOGS
-                        similitud = fuzz.ratio(institucion_buscada.lower(), texto_opcion.lower())
-                        opciones_estado_incorrecto.append((opciones_elementos[i], texto_opcion, similitud))
-                else:
-                    # Opciones sin estado
-                    similitud = fuzz.ratio(institucion_buscada.lower(), texto_opcion.lower())
-                    opciones_sin_estado.append((opciones_elementos[i], texto_opcion, similitud))
-            
-            # EVALUAR OPCIONES CON EL ESTADO CORRECTO PRIMERO
-            if opciones_estado_correcto:
-                print(f"\n✅ ENCONTRADAS {len(opciones_estado_correcto)} OPCIONES CON ESTADO CORRECTO ({abreviacion_esperada})")
-                
-                # Ordenar por similitud
-                opciones_estado_correcto.sort(key=lambda x: x[2], reverse=True)
-                
-                # Mostrar solo las opciones con palabras clave importantes
-                opciones_relevantes = [opt for opt in opciones_estado_correcto if opt[2] > 90]
-                
-                if opciones_relevantes:
-                    print("🏆 OPCIONES CON PALABRAS CLAVE COINCIDENTES:")
-                    for j, (elemento, texto, similitud) in enumerate(opciones_relevantes[:3]):
-                        print(f"   {j+1}. '{texto}' (prioridad: {similitud:.1f})")
-                else:
-                    print("⚠️ No se encontraron opciones con palabras clave exactas")
-                    print("🔍 Mejores opciones por similitud general:")
-                    for j, (elemento, texto, similitud) in enumerate(opciones_estado_correcto[:2]):
-                        print(f"   {j+1}. '{texto}' (similitud: {similitud:.1f}%)")
-                
-                # Si la mejor opción del estado correcto tiene similitud decente, usarla
-                mejor_elemento, mejor_texto, mejor_similitud = opciones_estado_correcto[0]
-                
-                # Umbral diferenciado: alto para palabras clave, medio para similitud
-                umbral_minimo = 95 if mejor_similitud > 90 else 75
-                
-                if mejor_similitud >= umbral_minimo:
-                    print(f"\n🎉 SELECCIONANDO OPCIÓN DEL ESTADO CORRECTO:")
-                    print(f"   📝 Buscado: '{institucion_buscada}'")
-                    print(f"   ✅ Encontrado: '{mejor_texto}'")
-                    print(f"   📊 Similitud: {mejor_similitud:.1f}%")
-                    print(f"   🎯 Estado: {abreviacion_esperada} (CORRECTO)")
-                    print("="*80)
-                    return mejor_elemento, mejor_texto, mejor_similitud
-                else:
-                    print(f"⚠️ Similitud insuficiente: {mejor_similitud:.1f}% (mínimo requerido: {umbral_minimo}%)")
-                    print(f"❌ RECHAZANDO - No hay coincidencia suficiente de palabras clave")
-            
-            # Silenciar logs de estados incorrectos
-        
-        # BÚSQUEDA NORMAL (si no hay estado detectado o no hay opciones del estado correcto)
-        print(f"\n🔍 BÚSQUEDA GENERAL (sin prioridad de estado)")
-        print("="*60)
-        
-        mejor_resultado = None
-        mejor_similitud = 0
-        
-        for variacion in variaciones_busqueda:
-            print(f"🔍 Probando variación: '{variacion}'")
-            
-            # 1. BÚSQUEDA EXACTA
-            for j, texto_opcion in enumerate(todas_opciones):
-                if variacion.lower() == texto_opcion.lower():
-                    print(f"🎉 ¡COINCIDENCIA EXACTA!: '{texto_opcion}'")
-                    return opciones_elementos[j], texto_opcion, 100
-            
-            # 2. FUZZY MATCHING
-            try:
-                mejor_coincidencia, similitud = process.extractOne(
-                    variacion, 
-                    todas_opciones, 
-                    scorer=fuzz.ratio
-                )
-                
-                if similitud > mejor_similitud:
-                    indice = todas_opciones.index(mejor_coincidencia)
-                    elemento = opciones_elementos[indice]
-                    mejor_resultado = (elemento, mejor_coincidencia, similitud)
-                    mejor_similitud = similitud
-                    print(f"   🔬 Nueva mejor similitud: {similitud}% - '{mejor_coincidencia}'")
-                    
-            except Exception as e:
-                continue
-        
-        # RESULTADO FINAL CON VALIDACIÓN MEJORADA
-        if mejor_resultado and mejor_similitud >= 80:  # Umbral aumentado para evitar falsos positivos
-            elemento, texto_encontrado, similitud = mejor_resultado
-            
-            # Validación adicional si hay estado detectado
-            if estado_detectado and abreviacion_esperada:
-                if not texto_encontrado.startswith(abreviacion_esperada):
-                    print(f"\n❌ VALIDACIÓN FALLIDA:")
-                    print(f"   📝 Buscado: '{institucion_buscada}' (Estado: {estado_detectado})")
-                    print(f"   ⚠️ Encontrado: '{texto_encontrado}' (Estado incorrecto)")
-                    print(f"   📊 Similitud: {similitud}%")
-                    print(f"   🚫 RECHAZANDO por no coincidir con estado esperado: {abreviacion_esperada}")
-                    print("="*80)
-                    return None, None, 0
-            
-            print(f"\n🏆 RESULTADO FINAL VALIDADO:")
-            print(f"   📝 Buscado: '{institucion_buscada}'")
-            print(f"   ✅ Encontrado: '{texto_encontrado}'")
-            print(f"   📊 Similitud: {similitud}%")
-            
-            if estado_detectado:
-                print(f"   🎯 Estado validado: {abreviacion_esperada} ✓")
-            
-            print("="*80)
-            return elemento, texto_encontrado, similitud
-        else:
-            print(f"\n❌ No se encontró coincidencia aceptable")
-            if mejor_resultado:
-                print(f"   📊 Mejor similitud encontrada: {mejor_similitud}% (mínimo requerido: 70%)")
-            print("="*80)
+        if not coincidencias:
+            print("❌ No se encontraron coincidencias")
             return None, None, 0
+        
+        # Mostrar resultados
+        print(f"🏆 COINCIDENCIAS ENCONTRADAS ({len(coincidencias)}):")
+        for i, (opcion, similitud) in enumerate(coincidencias[:5]):
+            print(f"   {i+1}. '{opcion}' ({similitud:.1f}%)")
+        
+        # Seleccionar la mejor opción
+        mejor_opcion, mejor_similitud = coincidencias[0]
+        
+        # Encontrar el elemento correspondiente
+        mejor_elemento = None
+        for i, texto in enumerate(todas_opciones):
+            if texto == mejor_opcion:
+                mejor_elemento = opciones_elementos[i]
+                break
+        
+        if mejor_elemento:
+            print(f"\n✅ SELECCIONANDO: '{mejor_opcion}' ({mejor_similitud:.1f}%)")
+            return mejor_elemento, mejor_opcion, mejor_similitud
+        
+        return None, None, 0
 
     def buscar_contactos_instituciones(self, institucion: str, headless: bool = False):
         """Busca contactos de una institución específica - CÓDIGO COMPLETO."""
@@ -439,13 +494,28 @@ class AgenteTransparencia:
             # Configurar wait al inicio
             wait = WebDriverWait(driver, 20)
             
-            # Navegar directamente a la página
+            # Navegar con comportamiento humano
             print("📄 Navegando a la página...")
+            
+            # Primero ir a Google para parecer más humano
+            driver.get("https://www.google.com")
+            time.sleep(2)
+            
+            # Luego navegar a la página objetivo
             driver.get("https://consultapublicamx.plataformadetransparencia.org.mx/vut-web/faces/view/consultaPublica.xhtml")
             
-            # Espera corta para que cargue la página
+            # Espera más larga para parecer humano
             print("⏳ Esperando que cargue la página...")
-            time.sleep(5)
+            time.sleep(8)
+            
+            # Simular movimiento de mouse
+            try:
+                actions = ActionChains(driver)
+                actions.move_by_offset(100, 100).perform()
+                time.sleep(1)
+                actions.move_by_offset(200, 150).perform()
+            except:
+                pass
             
             # Verificar y esperar a que desaparezcan las capas bloqueadoras
             print("🔍 Verificando capas bloqueadoras...")
@@ -503,14 +573,21 @@ class AgenteTransparencia:
             driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", dropdown_button)
             time.sleep(2)
             
-            # Abrir dropdown con múltiples estrategias
+            # Abrir dropdown con comportamiento humano
             print("📋 Intentando abrir dropdown...")
             click_exitoso = False
             
+            # Simular hover antes del clic
             try:
+                actions = ActionChains(driver)
+                actions.move_to_element(dropdown_button).perform()
+                time.sleep(1)
+                
+                # Clic con pausa humana
                 dropdown_button.click()
                 click_exitoso = True
                 print("✅ Dropdown abierto con clic normal")
+                time.sleep(2)  # Pausa humana
             except Exception as e:
                 print(f"⚠️ Clic normal falló: {e}")
             
@@ -541,9 +618,17 @@ class AgenteTransparencia:
             print(f"\n🎯 BÚSQUEDA INTELIGENTE CON PRIORIDAD DE ESTADO")
             print("="*80)
             
-            opcion_elemento, texto_encontrado, similitud = self.encontrar_opcion_mas_similar(
-                driver, wait, institucion
-            )
+            # INTENTAR AUTOCOMPLETADO PRIMERO
+            resultado_autocompletado = self.buscar_con_autocompletado(driver, wait, institucion)
+            
+            if resultado_autocompletado[0]:  # Si autocompletado funcionó
+                opcion_elemento, texto_encontrado, similitud = resultado_autocompletado
+            else:
+                # FALLBACK: Método tradicional
+                print("🔄 Usando método tradicional como fallback...")
+                opcion_elemento, texto_encontrado, similitud = self.encontrar_opcion_mas_similar(
+                    driver, wait, institucion
+                )
             
             if not opcion_elemento:
                 print("❌ No se encontró ninguna opción similar")
@@ -559,16 +644,26 @@ class AgenteTransparencia:
             print(f"   📊 Similitud: {similitud}%")
             print("="*80)
             
-            # Seleccionar la opción encontrada
+            # Seleccionar la opción con comportamiento humano
             try:
-                driver.execute_script("arguments[0].scrollIntoView(true);", opcion_elemento)
+                # Scroll suave
+                driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", opcion_elemento)
+                time.sleep(2)
+                
+                # Hover antes del clic
+                actions = ActionChains(driver)
+                actions.move_to_element(opcion_elemento).perform()
                 time.sleep(1)
+                
+                # Clic con pausa
                 opcion_elemento.click()
+                time.sleep(2)
                 print("✅ Opción seleccionada exitosamente")
             except Exception as e:
                 print(f"⚠️ Error haciendo clic: {e}")
                 try:
                     driver.execute_script("arguments[0].click();", opcion_elemento)
+                    time.sleep(2)
                     print("✅ Opción seleccionada con JavaScript")
                 except Exception as e2:
                     print(f"❌ Error total: {e2}")
@@ -662,37 +757,84 @@ class AgenteTransparencia:
             
             print("\n🎉 ¡Directorio cargado exitosamente!")
             
-            # Hacer clic en "Ver todos los campos"
-            print("👁️ Buscando botón 'Ver todos los campos'...")
+            # FORZAR EXPANSIÓN DE TODOS LOS CAMPOS
+            print("👁️ Expandiendo todos los campos...")
+            
+            # Estrategia múltiple para asegurar expansión
             try:
-                ver_todos_campos = wait.until(EC.element_to_be_clickable((By.ID, "toggleIrrelevantes")))
-                print(f"✅ Botón encontrado")
+                # 1. Buscar y hacer clic en el botón
+                botones_posibles = [
+                    (By.ID, "toggleIrrelevantes"),
+                    (By.XPATH, "//button[contains(text(), 'Ver todos')]"),
+                    (By.XPATH, "//button[contains(text(), 'Mostrar todos')]"),
+                    (By.XPATH, "//a[contains(text(), 'Ver todos')]"),
+                    (By.CSS_SELECTOR, "button[onclick*='ocultaMostrar']"),
+                    (By.CSS_SELECTOR, "a[onclick*='ocultaMostrar']")
+                ]
                 
-                driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", ver_todos_campos)
-                time.sleep(2)
-                
-                try:
-                    ver_todos_campos.click()
-                    print("✅ Clic exitoso en 'Ver todos los campos'")
-                except Exception as e:
-                    print(f"⚠️ Error en clic normal: {e}")
+                boton_encontrado = False
+                for selector in botones_posibles:
                     try:
-                        driver.execute_script("arguments[0].click();", ver_todos_campos)
-                        print("✅ Clic exitoso con JavaScript")
-                    except Exception as e2:
-                        print(f"⚠️ Error en JavaScript: {e2}")
-                        try:
-                            driver.execute_script("ocultaMostrar(); cambiarTexto();")
-                            print("✅ Funciones ejecutadas directamente")
-                        except Exception as e3:
-                            print(f"⚠️ Error ejecutando funciones: {e3}")
+                        boton = driver.find_element(*selector)
+                        driver.execute_script("arguments[0].scrollIntoView(true);", boton)
+                        time.sleep(1)
+                        
+                        # Múltiples métodos de clic
+                        for metodo in range(3):
+                            try:
+                                if metodo == 0:
+                                    boton.click()
+                                elif metodo == 1:
+                                    driver.execute_script("arguments[0].click();", boton)
+                                else:
+                                    driver.execute_script("arguments[0].dispatchEvent(new MouseEvent('click', {bubbles: true}));", boton)
+                                
+                                print(f"✅ Botón clickeado (método {metodo + 1})")
+                                boton_encontrado = True
+                                break
+                            except:
+                                continue
+                        
+                        if boton_encontrado:
+                            break
+                            
+                    except:
+                        continue
                 
-                print("⏳ Esperando que se muestren todos los campos...")
-                time.sleep(5)
+                # 2. Ejecutar funciones JavaScript directamente
+                print("🔧 Ejecutando funciones JavaScript...")
+                scripts_expansion = [
+                    "if(typeof ocultaMostrar === 'function') { ocultaMostrar(); }",
+                    "if(typeof cambiarTexto === 'function') { cambiarTexto(); }",
+                    "if(typeof mostrarTodos === 'function') { mostrarTodos(); }",
+                    "if(typeof toggleIrrelevantes === 'function') { toggleIrrelevantes(); }",
+                    "$('#toggleIrrelevantes').click();",
+                    "$('button:contains(Ver todos)').click();",
+                    "$('.irrelevante').show();",
+                    "$('[style*=display:none]').show();"
+                ]
+                
+                for script in scripts_expansion:
+                    try:
+                        driver.execute_script(script)
+                        time.sleep(1)
+                    except:
+                        continue
+                
+                # 3. Esperar y verificar expansión
+                time.sleep(8)  # Tiempo generoso para que se expandan
+                
+                # Contar columnas finales
+                try:
+                    headers_finales = driver.find_elements(By.CSS_SELECTOR, "table.integraInformacion.consultaHeader.dataTable.no-footer thead td")
+                    print(f"📊 Columnas visibles: {len(headers_finales)}")
+                except:
+                    print("⚠️ No se pudieron contar las columnas")
+                
+                print("✅ Proceso de expansión completado")
                 
             except Exception as e:
-                print(f"⚠️ No se pudo hacer clic en 'Ver todos los campos': {e}")
-                print("🔄 Continuando con extracción...")
+                print(f"⚠️ Error en expansión: {e}")
             
             # Extraer tabla del directorio
             print("📊 Extrayendo tabla del directorio...")
@@ -705,37 +847,69 @@ class AgenteTransparencia:
                 
                 print("🔍 Buscando estructura DataTables...")
                 
-                # 1. Obtener headers
+                # 1. EXTRAER TODOS LOS HEADERS POSIBLES
                 headers = []
                 try:
+                    # Buscar tabla de headers
                     tabla_headers = contenedor_tabla.find_element(By.CSS_SELECTOR, "table.integraInformacion.consultaHeader.dataTable.no-footer")
-                    thead_element = tabla_headers.find_element(By.TAG_NAME, "thead")
-                    headers_elementos = thead_element.find_elements(By.CSS_SELECTOR, "td")
                     
-                    ejercicio_encontrado = False
-                    for td in headers_elementos:
+                    # Obtener TODAS las celdas de header (incluyendo ocultas)
+                    headers_elementos = tabla_headers.find_elements(By.CSS_SELECTOR, "thead td, thead th")
+                    
+                    print(f"🔍 Elementos de header encontrados: {len(headers_elementos)}")
+                    
+                    for i, td in enumerate(headers_elementos):
                         try:
-                            span_element = td.find_element(By.CSS_SELECTOR, "span[data-original-title]")
-                            header_text = span_element.get_attribute("data-original-title").strip()
+                            # Múltiples métodos para obtener el texto del header
+                            header_text = ""
                             
+                            # Método 1: data-original-title
+                            try:
+                                span_element = td.find_element(By.CSS_SELECTOR, "span[data-original-title]")
+                                header_text = span_element.get_attribute("data-original-title")
+                            except:
+                                pass
+                            
+                            # Método 2: texto del span
                             if not header_text:
-                                header_text = span_element.text.strip()
+                                try:
+                                    span_element = td.find_element(By.TAG_NAME, "span")
+                                    header_text = span_element.text
+                                except:
+                                    pass
+                            
+                            # Método 3: texto directo del td
+                            if not header_text:
+                                header_text = td.text
+                            
+                            # Método 4: innerHTML si está vacío
+                            if not header_text:
+                                header_text = driver.execute_script("return arguments[0].innerHTML;", td)
+                                # Limpiar HTML tags
+                                import re
+                                header_text = re.sub(r'<[^>]+>', '', header_text)
+                            
+                            header_text = header_text.strip()
+                            
+                            if header_text:
+                                headers.append(header_text)
+                                print(f"   📋 Header {i+1}: '{header_text}'")
+                            else:
+                                # Agregar placeholder para columnas vacías
+                                headers.append(f"Columna_{i+1}")
+                                print(f"   📋 Header {i+1}: 'Columna_{i+1}' (placeholder)")
                                 
-                        except:
-                            header_text = td.text.strip()
-                        
-                        # Empezar desde "Ejercicio"
-                        if header_text == "Ejercicio":
-                            ejercicio_encontrado = True
-                        
-                        if ejercicio_encontrado and header_text:
-                            headers.append(header_text)
+                        except Exception as e:
+                            # Agregar placeholder en caso de error
+                            headers.append(f"Columna_{i+1}")
+                            print(f"   ⚠️ Error en header {i+1}: {e}")
                     
-                    print(f"📋 Headers extraídos: {len(headers)} columnas")
+                    print(f"📊 Total headers extraídos: {len(headers)}")
                     
                 except Exception as e:
-                    print(f"⚠️ Error extrayendo headers: {e}")
-                    headers = ["Ejercicio", "Fecha_inicio", "Fecha_termino", "Cargo", "Nombre"]
+                    print(f"❌ Error extrayendo headers: {e}")
+                    # Headers mínimos como fallback
+                    headers = ["Ejercicio", "Fecha_inicio", "Fecha_termino", "Cargo", "Nombre", "Email", "Telefono"]
                 
                 # 2. Obtener datos
                 datos = []
@@ -748,36 +922,66 @@ class AgenteTransparencia:
                     
                     for i, fila in enumerate(filas_datos):
                         try:
-                            celdas = fila.find_elements(By.TAG_NAME, "td")
+                            # Obtener TODAS las celdas (incluyendo ocultas)
+                            celdas = fila.find_elements(By.CSS_SELECTOR, "td, th")
+                            
                             if celdas:
-                                # Buscar columna "Ejercicio"
-                                inicio_ejercicio = 0
-                                for j, celda in enumerate(celdas):
-                                    texto_celda = celda.text.strip()
-                                    if texto_celda == "2025":
-                                        inicio_ejercicio = j
-                                        break
-                                
-                                # Extraer datos desde Ejercicio
                                 fila_datos = {}
-                                for j in range(inicio_ejercicio, len(celdas)):
-                                    if j - inicio_ejercicio < len(headers):
-                                        celda = celdas[j]
-                                        header_name = headers[j - inicio_ejercicio]
-                                        
-                                        texto_celda = celda.text.strip()
-                                        
-                                        if not texto_celda:
-                                            try:
-                                                span_con_titulo = celda.find_element(By.CSS_SELECTOR, "span[data-original-title]")
-                                                texto_celda = span_con_titulo.get_attribute("data-original-title")
-                                            except:
-                                                pass
-                                        
-                                        fila_datos[header_name] = texto_celda
                                 
-                                if any(v for v in fila_datos.values() if v):
+                                # Procesar TODAS las celdas disponibles
+                                for j, celda in enumerate(celdas):
+                                    # Asegurar que tenemos un header para esta columna
+                                    if j < len(headers):
+                                        header_name = headers[j]
+                                    else:
+                                        header_name = f"Columna_{j+1}"
+                                        headers.append(header_name)  # Agregar header dinámicamente
+                                    
+                                    # Múltiples métodos para extraer el contenido
+                                    texto_celda = ""
+                                    
+                                    # Método 1: data-original-title
+                                    try:
+                                        span_con_titulo = celda.find_element(By.CSS_SELECTOR, "span[data-original-title]")
+                                        texto_celda = span_con_titulo.get_attribute("data-original-title")
+                                    except:
+                                        pass
+                                    
+                                    # Método 2: texto directo
+                                    if not texto_celda:
+                                        texto_celda = celda.text.strip()
+                                    
+                                    # Método 3: innerHTML si está vacío
+                                    if not texto_celda:
+                                        try:
+                                            innerHTML = driver.execute_script("return arguments[0].innerHTML;", celda)
+                                            if innerHTML and innerHTML.strip():
+                                                # Limpiar HTML pero preservar texto
+                                                import re
+                                                texto_celda = re.sub(r'<[^>]+>', ' ', innerHTML).strip()
+                                        except:
+                                            pass
+                                    
+                                    # Método 4: textContent como último recurso
+                                    if not texto_celda:
+                                        try:
+                                            texto_celda = driver.execute_script("return arguments[0].textContent;", celda)
+                                        except:
+                                            pass
+                                    
+                                    # CORREGIR CODIFICACIÓN DE CARACTERES
+                                    if texto_celda:
+                                        texto_celda = self.corregir_codificacion(texto_celda.strip())
+                                    
+                                    fila_datos[header_name] = texto_celda if texto_celda else ""
+                                
+                                # Agregar fila si tiene algún contenido
+                                if any(v.strip() for v in fila_datos.values() if v):
                                     datos.append(fila_datos)
+                                    
+                                    # Log cada 10 filas para mostrar progreso
+                                    if (i + 1) % 10 == 0:
+                                        print(f"   📊 Procesadas {i + 1} filas...")
                             
                         except Exception as e_fila:
                             print(f"⚠️ Error procesando fila {i}: {e_fila}")
@@ -786,8 +990,25 @@ class AgenteTransparencia:
                     print(f"📊 Total filas extraídas: {len(datos)}")
                     
                     if datos:
+                        # Crear DataFrame con todos los datos
                         tabla_df = pd.DataFrame(datos)
-                        print(f"✅ DataFrame creado: {len(tabla_df)} filas, {len(tabla_df.columns)} columnas")
+                        
+                        # Rellenar columnas faltantes con valores vacíos
+                        for header in headers:
+                            if header not in tabla_df.columns:
+                                tabla_df[header] = ""
+                        
+                        # Reordenar columnas según el orden de headers
+                        tabla_df = tabla_df.reindex(columns=headers, fill_value="")
+                        
+                        print(f"✅ DataFrame completo: {len(tabla_df)} filas, {len(tabla_df.columns)} columnas")
+                        print(f"📋 Columnas finales: {list(tabla_df.columns)}")
+                        
+                        # Mostrar estadísticas de contenido
+                        for col in tabla_df.columns:
+                            no_vacios = tabla_df[col].astype(str).str.strip().ne('').sum()
+                            if no_vacios > 0:
+                                print(f"   📊 {col}: {no_vacios} registros con datos")
                     else:
                         print("❌ No se pudieron extraer datos válidos")
                         
@@ -800,7 +1021,8 @@ class AgenteTransparencia:
                     print("📊 DIRECTORIO EXTRAÍDO")
                     print("="*80)
                     print(f"📈 Total registros: {len(tabla_df)}")
-                    print(f"📋 Columnas: {list(tabla_df.columns)}")
+                    print(f"📋 Total columnas: {len(tabla_df.columns)}")
+                    print(f"📋 Columnas extraídas: {list(tabla_df.columns)[:10]}{'...' if len(tabla_df.columns) > 10 else ''}")
                     
                     # Verificar ejercicios
                     if 'Ejercicio' in tabla_df.columns:
@@ -823,14 +1045,24 @@ class AgenteTransparencia:
                     # Guardar CSV
                     institucion_clean = texto_encontrado.replace(' ', '_').replace('/', '_').lower()
                     filename = os.path.join(self.download_path, f"directorio_{institucion_clean}.csv")
-                    tabla_df.to_csv(filename, index=False, encoding='utf-8')
+                    tabla_df.to_csv(filename, index=False, encoding='utf-8-sig')
                     print(f"💾 Directorio guardado en: {filename}")
                     
-                    # Estadísticas
-                    print(f"\n📈 === ESTADÍSTICAS ===")
+                    # Estadísticas detalladas
+                    print(f"\n📈 === ESTADÍSTICAS COMPLETAS ===")
+                    print(f"📊 Total columnas extraídas: {len(tabla_df.columns)}")
+                    print(f"📊 Total filas extraídas: {len(tabla_df)}")
+                    
+                    # Mostrar solo columnas con datos
+                    columnas_con_datos = []
                     for col in tabla_df.columns:
-                        no_vacios = tabla_df[col].notna().sum()
-                        print(f"📌 {col}: {no_vacios} registros con datos")
+                        no_vacios = tabla_df[col].astype(str).str.strip().ne('').sum()
+                        if no_vacios > 0:
+                            columnas_con_datos.append((col, no_vacios))
+                    
+                    print(f"📊 Columnas con datos: {len(columnas_con_datos)}")
+                    for col, cantidad in columnas_con_datos:
+                        print(f"   📌 {col}: {cantidad} registros")
                     
                     print("\n🎉 ¡PROCESO COMPLETADO EXITOSAMENTE!")
                     print("="*60)
@@ -838,7 +1070,9 @@ class AgenteTransparencia:
                     print(f"✅ Encontrado: {texto_encontrado}")
                     print(f"📊 Similitud: {similitud}%")
                     print(f"📊 Registros: {len(tabla_df)}")
+                    print(f"📊 Columnas totales: {len(tabla_df.columns)}")
                     print(f"💾 Archivo: {filename}")
+                    print(f"✅ EXTRACCIÓN COMPLETA - Todos los campos incluidos")
                     print("="*60)
                     return tabla_df
                         
@@ -882,6 +1116,7 @@ class AgenteTransparencia:
                     'ruta_archivo': archivo_path,
                     'total_registros': len(tabla_df),
                     'total_emails': total_emails,
+                    'total_columnas': len(tabla_df.columns),
                     'columnas': list(tabla_df.columns)
                 }
             else:
@@ -903,3 +1138,26 @@ class AgenteTransparencia:
                 'archivo_descargado': False,
                 'ruta_archivo': None
             }
+    
+    def corregir_codificacion(self, texto):
+        """Corrige problemas de codificación de caracteres"""
+        if not texto:
+            return texto
+        
+        try:
+            correcciones = {
+                'Ã¡': 'á', 'Ã©': 'é', 'Ã­': 'í', 'Ã³': 'ó', 'Ãº': 'ú',
+                'Ã±': 'ñ', 'Ã¼': 'ü',
+                'RamÃ­rez': 'Ramírez', 'ArgÃ¼elles': 'Argüelles',
+                'MartÃ­nez': 'Martínez', 'GonzÃ¡lez': 'González',
+                'RodrÃ­guez': 'Rodríguez', 'HernÃ¡ndez': 'Hernández'
+            }
+            
+            texto_corregido = texto
+            for incorrecto, correcto in correcciones.items():
+                texto_corregido = texto_corregido.replace(incorrecto, correcto)
+            
+            return texto_corregido
+            
+        except Exception:
+            return texto
