@@ -12,3 +12,4 @@ python-levenshtein>=0.21.0
 PyPDF2>=3.0.0
 pytesseract>=0.3.10
 Pillow>=10.1.0
+ollama>=0.1.0

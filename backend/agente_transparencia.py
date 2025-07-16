@@ -15,6 +15,7 @@ import pandas as pd
 import time
 from fuzzywuzzy import fuzz, process
 import re
+from ollama_filter import OllamaContactFilter
 
 try:
     from selenium_stealth import stealth
@@ -27,6 +28,9 @@ class AgenteTransparencia:
         self.download_path = os.path.abspath(download_path)
         if not os.path.exists(self.download_path):
             os.makedirs(self.download_path)
+        
+        # Initialize Ollama contact filter
+        self.contact_filter = OllamaContactFilter()
         
         # DICCIONARIO DE ESTADOS Y ABREVIACIONES
         self.estados_mexico = {
@@ -913,11 +917,32 @@ class AgenteTransparencia:
                     
                     print("\n" + "="*80)
                     
-                    # Guardar CSV
-                    institucion_clean = texto_encontrado.replace(' ', '_').replace('/', '_').lower()
-                    filename = os.path.join(self.download_path, f"directorio_{institucion_clean}.csv")
-                    tabla_df.to_csv(filename, index=False, encoding='utf-8-sig')
-                    print(f"💾 Directorio guardado en: {filename}")
+                    # Apply Ollama filtering before saving
+                    print("🤖 Applying Ollama-based filtering...")
+                    try:
+                        filtered_df = self.contact_filter.filter_contacts_batch(tabla_df)
+                        
+                        # Save filtered results
+                        institucion_clean = texto_encontrado.replace(' ', '_').replace('/', '_').lower()
+                        filename = os.path.join(self.download_path, f"directorio_filtered_{institucion_clean}.csv")
+                        filtered_df.to_csv(filename, index=False, encoding='utf-8-sig')
+                        
+                        print(f"✅ Original: {len(tabla_df)} contacts")
+                        print(f"✅ Filtered: {len(filtered_df)} contacts") 
+                        print(f"💾 Filtered data saved: {filename}")
+                        
+                        # Update tabla_df to filtered version for return
+                        tabla_df = filtered_df
+                        
+                    except Exception as filter_error:
+                        print(f"⚠️ Error applying filter: {filter_error}")
+                        print("⚠️ Saving unfiltered data as fallback...")
+                        
+                        # Fallback: save unfiltered data
+                        institucion_clean = texto_encontrado.replace(' ', '_').replace('/', '_').lower()
+                        filename = os.path.join(self.download_path, f"directorio_{institucion_clean}.csv")
+                        tabla_df.to_csv(filename, index=False, encoding='utf-8-sig')
+                        print(f"💾 Unfiltered data saved: {filename}")
                     
                     # Estadísticas detalladas
                     print(f"\n📈 === ESTADÍSTICAS COMPLETAS ===")
@@ -975,8 +1000,9 @@ class AgenteTransparencia:
                     emails_validos = emails_validos[emails_validos != '']
                     total_emails += len(emails_validos)
                 
+                # The tabla_df is now filtered, so update the path to reflect this
                 institucion_clean = nombre_entidad.replace(' ', '_').replace('/', '_').lower()
-                archivo_path = os.path.join(self.download_path, f"directorio_{institucion_clean}.csv")
+                archivo_path = os.path.join(self.download_path, f"directorio_filtered_{institucion_clean}.csv")
                 
                 return {
                     'exito': True,
@@ -985,10 +1011,11 @@ class AgenteTransparencia:
                     'similitud': 100,
                     'archivo_descargado': True,
                     'ruta_archivo': archivo_path,
-                    'total_registros': len(tabla_df),
+                    'total_registros': len(tabla_df),  # Now filtered count
                     'total_emails': total_emails,
                     'total_columnas': len(tabla_df.columns),
-                    'columnas': list(tabla_df.columns)
+                    'columnas': list(tabla_df.columns),
+                    'filter_efficiency': f"{len(tabla_df)} filtered contacts"
                 }
             else:
                 return {
