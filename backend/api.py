@@ -87,6 +87,10 @@ async def ejecutar_investigacion(entidades: List[str], session_id: str):
         coordinador.agente_transparencia.set_download_path(carpeta_busqueda)
         coordinador.agente_contactos.set_download_path(carpeta_busqueda)
         
+        # Inicializar lista de contactos AWS
+        if 'contactos_aws' not in investigaciones_activas[session_id]:
+            investigaciones_activas[session_id]['contactos_aws'] = []
+        
         for i, entidad in enumerate(entidades):
             log_callback(f"Investigando: {entidad}", "info")
             
@@ -94,11 +98,36 @@ async def ejecutar_investigacion(entidades: List[str], session_id: str):
             resultado = coordinador.investigar_entidad(entidad, log_callback)
             investigaciones_activas[session_id]['resultados'].append(resultado)
             
+            # FILTRAR INMEDIATAMENTE si transparencia fue exitosa
+            if resultado['transparencia'].get('exito') and 'ruta_archivo' in resultado['transparencia']:
+                try:
+                    ruta_archivo = resultado['transparencia']['ruta_archivo']
+                    if os.path.exists(ruta_archivo):
+                        log_callback(f"📊 Filtrando contactos de {entidad}...", "info")
+                        
+                        from filtro_aws import FiltroAWS
+                        filtro = FiltroAWS()
+                        contactos_filtrados = filtro.filtrar_contactos(ruta_archivo)
+                        
+                        # Añadir entidad a cada contacto y agregarlo a la lista
+                        for contacto in contactos_filtrados:
+                            contacto['entidad'] = entidad
+                            investigaciones_activas[session_id]['contactos_aws'].append(contacto)
+                        
+                        log_callback(f"✅ {entidad}: {len(contactos_filtrados)} contactos AWS encontrados", "success")
+                        
+                except Exception as e:
+                    log_callback(f"⚠️ Error filtrando {entidad}: {e}", "warning")
+            
             # Actualizar progreso
             investigaciones_activas[session_id]['entidades_procesadas'] = i + 1
             investigaciones_activas[session_id]['progress'] = ((i + 1) / total_entidades) * 100
             
             log_callback(f"Completado: {entidad}", "success")
+        
+        # El filtrado ya se hizo en tiempo real durante la investigación
+        total_contactos = len(investigaciones_activas[session_id].get('contactos_aws', []))
+        log_callback(f"🎯 Total contactos AWS filtrados: {total_contactos}", "success")
         
         investigaciones_activas[session_id]['status'] = 'completado'
         log_callback("¡Investigación completada!", "success")
@@ -126,59 +155,33 @@ async def obtener_logs(session_id: str, desde: int = 0):
 
 @app.post("/api/exportar/{session_id}")
 async def exportar_resultados(session_id: str):
-    """Exporta los resultados de una investigación"""
+    """Exporta los contactos AWS filtrados por Ollama"""
     if session_id not in investigaciones_activas:
         return {"error": "Sesión no encontrada"}
     
-    resultados = investigaciones_activas[session_id]['resultados']
-    
     try:
-        from datetime import datetime
-        
-        def log_filtrado(message: str, tipo: str = "info"):
-            log_entry = {
-                'timestamp': datetime.now().isoformat(),
-                'message': message,
-                'type': tipo
-            }
-            investigaciones_activas[session_id]['logs'].append(log_entry)
-        
-        # Usar carpeta de búsqueda específica
         carpeta_busqueda = investigaciones_activas[session_id].get('carpeta_busqueda', 'downloads')
+        contactos_aws = investigaciones_activas[session_id].get('contactos_aws', [])
         
-        # Exportar resultados normales
-        filename = f"{carpeta_busqueda}/resumen_{session_id}.xlsx"
-        coordinador.exportar_resultados(resultados, filename)
-        
-        # Filtrar contactos importantes con logs
-        from filtro_contactos import FiltroContactos
-        filtro = FiltroContactos()
-        
-        # Obtener nombres de instituciones procesadas
-        instituciones = [r.get('entidad', 'Entidad') for r in resultados]
-        
-        if instituciones:
-            log_filtrado("📋 Iniciando filtrado de contactos importantes...", "info")
-            log_filtrado(f"🏢 Procesando {len(instituciones)} instituciones", "info")
-            log_filtrado("🔍 Analizando archivos CSV de ambos agentes...", "info")
-            log_filtrado("⚙️ Aplicando filtros de cargos importantes...", "info")
+        if contactos_aws:
+            # Agrupar por entidad para el Excel
+            contactos_por_entidad = {}
+            for contacto in contactos_aws:
+                entidad = contacto['entidad']
+                if entidad not in contactos_por_entidad:
+                    contactos_por_entidad[entidad] = []
+                contactos_por_entidad[entidad].append(contacto)
             
-            # Pasar carpeta de búsqueda al filtro
-            filtro.download_path = carpeta_busqueda
-            archivo_filtrado = filtro.generar_reporte_filtrado(instituciones, log_filtrado)
-            
-            log_filtrado(f"✅ Filtrado completado exitosamente", "success")
-            log_filtrado(f"📁 Archivo guardado: {os.path.basename(archivo_filtrado)}", "info")
-            log_filtrado(f"📂 Ubicación: {os.path.dirname(archivo_filtrado)}", "info")
+            # Generar Excel con contactos AWS
+            archivo_aws = coordinador.generar_excel_aws(contactos_por_entidad, carpeta_busqueda)
             
             return {
-                "message": "Resultados exportados y filtrados exitosamente", 
-                "filename": filename,
-                "archivo_filtrado": archivo_filtrado,
+                "message": "Contactos AWS exportados exitosamente",
+                "archivo_aws": archivo_aws,
                 "carpeta_busqueda": carpeta_busqueda
             }
         else:
-            return {"message": "Resultados exportados", "filename": filename}
+            return {"error": "No hay contactos AWS para exportar"}
             
     except Exception as e:
         return {"error": str(e)}

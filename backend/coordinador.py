@@ -80,17 +80,15 @@ class Coordinador:
             }
     
     def _ejecutar_agente_contactos(self, nombre_entidad, resultado, log_callback):
-        """Ejecutar agente de contactos web"""
+        """Ejecutar agente de contactos - Solo URLs"""
         try:
-            log_callback(f"      🔍 Buscando página oficial en Google...")
+            log_callback(f"      🔍 Buscando URL de directorio...")
             datos = self.agente_contactos.investigar(nombre_entidad)
             resultado['contactos'] = datos
             
             if datos['exito']:
-                url = datos['datos'].get('url_oficial', 'N/A')
-                contactos_count = len(datos['datos'].get('contactos', []))
-                log_callback(f"      ✅ Página encontrada: {url}")
-                log_callback(f"      📞 Contactos extraídos: {contactos_count}")
+                url_directorio = datos.get('url_directorio', 'N/A')
+                log_callback(f"      ✅ URL encontrada: {url_directorio}")
             else:
                 error = datos.get('error', 'Error desconocido')
                 log_callback(f"      ❌ Búsqueda web falló: {error}")
@@ -100,7 +98,7 @@ class Coordinador:
             resultado['contactos'] = {
                 'exito': False,
                 'error': str(e),
-                'datos': {}
+                'url_directorio': None
             }
     
     def filtrar_contactos_aws(self, contactos_raw):
@@ -291,3 +289,95 @@ class Coordinador:
             df_resumen.to_excel(writer, sheet_name='Resumen', index=False)
         
         return filepath
+    
+    def procesar_con_claude_al_final(self, resultados, log_callback):
+        """Procesa todos los resultados con Claude Desktop"""
+        try:
+            log_callback("🤖 Procesando contactos con Claude AI...", "info")
+            
+            contactos_aws = []
+            
+            for resultado in resultados:
+                entidad = resultado['entidad']
+                
+                # Solo procesar si transparencia fue exitosa
+                if resultado['transparencia'].get('exito') and 'ruta_archivo' in resultado['transparencia']:
+                    try:
+                        ruta_archivo = resultado['transparencia']['ruta_archivo']
+                        print(f"📁 Procesando: {ruta_archivo}")
+                        
+                        # Verificar si el archivo existe
+                        if not os.path.exists(ruta_archivo):
+                            print(f"❌ Archivo no existe: {ruta_archivo}")
+                            continue
+                        
+                        # Usar Claude Desktop
+                        from filtro_claude import FiltroClaude
+                        filtro = FiltroClaude()
+                        contactos_filtrados = filtro.filtrar_contactos(ruta_archivo, min_relevancia=60)
+                        
+                        for contacto in contactos_filtrados:
+                            contacto['entidad'] = entidad
+                            contactos_aws.append(contacto)
+                        
+                        log_callback(f"✅ {entidad}: {len(contactos_filtrados)} contactos AWS", "success")
+                    
+                    except Exception as e:
+                        log_callback(f"⚠️ Error procesando {entidad}: {e}", "warning")
+                        print(f"❌ Error detallado para {entidad}: {e}")
+                        print(f"📁 Ruta esperada: {resultado['transparencia'].get('ruta_archivo', 'N/A')}")
+                        continue
+            
+            log_callback(f"🎯 Total contactos AWS: {len(contactos_aws)}", "success")
+            return contactos_aws
+            
+        except Exception as e:
+            log_callback(f"❌ Error con Claude AI: {e}", "error")
+            return []
+            
+    def procesar_con_filtro_aws(self, resultados, log_callback):
+        """Procesa todos los resultados con filtro basado en reglas"""
+        try:
+            log_callback("📊 Procesando contactos con filtro AWS...", "info")
+            
+            contactos_aws = []
+            
+            for resultado in resultados:
+                entidad = resultado['entidad']
+                
+                # Solo procesar si transparencia fue exitosa
+                if resultado['transparencia'].get('exito') and 'ruta_archivo' in resultado['transparencia']:
+                    try:
+                        ruta_archivo = resultado['transparencia']['ruta_archivo']
+                        print(f"📁 Procesando: {ruta_archivo}")
+                        
+                        # Verificar si el archivo existe
+                        if not os.path.exists(ruta_archivo):
+                            print(f"❌ Archivo no existe: {ruta_archivo}")
+                            continue
+                        
+                        # Usar filtro basado en reglas
+                        from filtro_aws import FiltroAWS
+                        filtro = FiltroAWS()
+                        contactos_filtrados = filtro.filtrar_contactos(ruta_archivo, min_relevancia=60)
+                        
+                        for contacto in contactos_filtrados:
+                            contacto['entidad'] = entidad
+                            contactos_aws.append(contacto)
+                        
+                        log_callback(f"✅ {entidad}: {len(contactos_filtrados)} contactos AWS", "success")
+                    
+                    except Exception as e:
+                        log_callback(f"⚠️ Error procesando {entidad}: {e}", "warning")
+                        print(f"❌ Error detallado para {entidad}: {e}")
+                        print(f"📁 Ruta esperada: {resultado['transparencia'].get('ruta_archivo', 'N/A')}")
+                        continue
+            
+            log_callback(f"🎯 Total contactos AWS: {len(contactos_aws)}", "success")
+            return contactos_aws
+            
+        except Exception as e:
+            log_callback(f"❌ Error con filtro AWS: {e}", "error")
+            return []
+    
+    # Método eliminado - Reemplazado por filtro_aws.py

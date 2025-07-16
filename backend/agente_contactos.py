@@ -1167,9 +1167,9 @@ class AgenteContactos:
             return pd.DataFrame()
 
     def investigar(self, nombre_entidad):
-        """Método principal de investigación"""
+        """Método principal - Solo encuentra URLs de directorio"""
         try:
-            print(f"[AGENTE CONTACTOS ROBUSTO] Iniciando para: {nombre_entidad}")
+            print(f"[AGENTE CONTACTOS] Buscando URL de directorio para: {nombre_entidad}")
             
             # Buscar página oficial
             url_oficial = self.buscar_pagina_oficial_avanzada(nombre_entidad)
@@ -1178,36 +1178,160 @@ class AgenteContactos:
                 return {
                     'exito': False,
                     'error': 'No se encontró página oficial',
-                    'datos': {'contactos': [], 'total_contactos': 0}
+                    'url_directorio': None,
+                    'url_oficial': None
                 }
             
-            # Investigar directorio completo
-            df_contactos = self.investigar_directorio_completo(url_oficial, nombre_entidad)
+            # Buscar URL específica del directorio
+            url_directorio = self.buscar_url_directorio(nombre_entidad, url_oficial)
             
-            if not df_contactos.empty:
+            if url_directorio:
+                print(f"✅ URL de directorio encontrada: {url_directorio}")
                 return {
                     'exito': True,
                     'error': None,
-                    'datos': {
-                        'url_oficial': url_oficial,
-                        'contactos': df_contactos.to_dict('records'),
-                        'total_contactos': len(df_contactos)
-                    }
+                    'url_directorio': url_directorio,
+                    'url_oficial': url_oficial
                 }
             else:
+                print(f"⚠️ No se encontró URL específica de directorio")
                 return {
-                    'exito': False,
-                    'error': 'No se encontraron contactos en el directorio',
-                    'datos': {
-                        'url_oficial': url_oficial,
-                        'contactos': [],
-                        'total_contactos': 0
-                    }
+                    'exito': True,
+                    'error': 'Directorio no encontrado, revisar manualmente',
+                    'url_directorio': url_oficial,
+                    'url_oficial': url_oficial
                 }
                 
         except Exception as e:
             return {
                 'exito': False,
                 'error': str(e),
-                'datos': {'contactos': [], 'total_contactos': 0}
+                'url_directorio': None,
+                'url_oficial': None
             }
+    
+    def buscar_url_directorio(self, nombre_entidad, url_oficial):
+        """Busca la URL específica del directorio sin extraer contactos"""
+        print(f"🔍 Buscando URL de directorio en: {url_oficial}")
+        
+        driver = self.crear_driver_avanzado(headless=True)
+        
+        try:
+            driver.get(url_oficial)
+            time.sleep(5)
+            
+            # Buscar enlaces de directorio/organigrama
+            palabras_directorio = [
+                'directorio', 'organigrama', 'directorio institucional',
+                'funcionarios', 'autoridades', 'personal directivo',
+                'estructura organizacional', 'quien es quien', 'conocenos'
+            ]
+            
+            enlaces_encontrados = []
+            
+            # Buscar en menús y enlaces
+            for palabra in palabras_directorio:
+                try:
+                    enlaces = driver.find_elements(By.XPATH, f"//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{palabra}')]")
+                    
+                    for enlace in enlaces:
+                        try:
+                            href = enlace.get_attribute('href')
+                            texto = enlace.text.strip()
+                            
+                            if href and texto:
+                                if href.startswith('/'):
+                                    href = urljoin(url_oficial, href)
+                                
+                                enlaces_encontrados.append({
+                                    'url': href,
+                                    'texto': texto,
+                                    'palabra_clave': palabra
+                                })
+                                print(f"   🔗 Encontrado: '{texto}' -> {href}")
+                        except:
+                            continue
+                except:
+                    continue
+            
+            # Si encontró enlaces, devolver el más relevante
+            if enlaces_encontrados:
+                prioridades = ['directorio', 'organigrama', 'funcionarios', 'conocenos']
+                
+                for prioridad in prioridades:
+                    for enlace in enlaces_encontrados:
+                        if prioridad in enlace['palabra_clave']:
+                            return enlace['url']
+                
+                return enlaces_encontrados[0]['url']
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error buscando URL directorio: {e}")
+            return None
+        finally:
+            driver.quit()
+    
+    def buscar_url_directorio(self, nombre_entidad, url_oficial):
+        """Busca la URL específica del directorio sin extraer contactos"""
+        print(f"🔍 Buscando URL de directorio en: {url_oficial}")
+        
+        driver = self.crear_driver_avanzado(headless=True)
+        
+        try:
+            driver.get(url_oficial)
+            time.sleep(5)
+            
+            # Buscar enlaces de directorio/organigrama
+            palabras_directorio = [
+                'directorio', 'organigrama', 'directorio institucional',
+                'funcionarios', 'autoridades', 'personal directivo',
+                'estructura organizacional', 'quien es quien', 'conocenos'
+            ]
+            
+            enlaces_encontrados = []
+            
+            # Buscar en menús y enlaces
+            for palabra in palabras_directorio:
+                try:
+                    enlaces = driver.find_elements(By.XPATH, f"//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{palabra}')]")
+                    
+                    for enlace in enlaces:
+                        try:
+                            href = enlace.get_attribute('href')
+                            texto = enlace.text.strip()
+                            
+                            if href and texto:
+                                if href.startswith('/'):
+                                    href = urljoin(url_oficial, href)
+                                
+                                enlaces_encontrados.append({
+                                    'url': href,
+                                    'texto': texto,
+                                    'palabra_clave': palabra
+                                })
+                                print(f"   🔗 Encontrado: '{texto}' -> {href}")
+                        except:
+                            continue
+                except:
+                    continue
+            
+            # Si encontró enlaces, devolver el más relevante
+            if enlaces_encontrados:
+                prioridades = ['directorio', 'organigrama', 'funcionarios', 'conocenos']
+                
+                for prioridad in prioridades:
+                    for enlace in enlaces_encontrados:
+                        if prioridad in enlace['palabra_clave']:
+                            return enlace['url']
+                
+                return enlaces_encontrados[0]['url']
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error buscando URL directorio: {e}")
+            return None
+        finally:
+            driver.quit()

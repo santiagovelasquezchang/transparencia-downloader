@@ -318,82 +318,167 @@ Secretaría de Salud de Nayarit`;
               </SpaceBetween>
             </Container>
 
-            {/* Contenedor para Resultados y Estado lado a lado */}
-            <div style={{ display: 'flex', gap: '20px' }}>
+            {/* 4 PANELES ORGANIZADOS */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
               
-              {/* Resultados */}
-              {status && status.resultados && status.resultados.length > 0 && (
-                <div style={{ flex: 1 }}>
-                  <Container
-                    header={
-                      <h2 style={{ 
-                        fontSize: '1.8rem', 
-                        fontWeight: 'bold', 
-                        color: '#232F3E',
-                        margin: 0,
-                        fontFamily: 'Amazon Ember, sans-serif',
-                        textTransform: 'uppercase'
-                      }}>
-                        RESULTADOS DE INVESTIGACIÓN
-                      </h2>
-                    }
-                  >
-                <Cards
-                  cardDefinition={{
-                    header: item => item.entidad,
-                    sections: [
-                      {
-                        id: "transparencia",
-                        header: "🤖 Agente Transparencia",
-                        content: item => (
-                          <SpaceBetween direction="vertical" size="xs">
-                            <Box>
-                              <Badge color={item.transparencia.exito ? "success" : "error"}>
-                                {item.transparencia.exito ? "✅ Exitoso" : "❌ Falló"}
-                              </Badge>
+              {/* PANEL 2: URLs de Contactos */}
+              <Container
+                header={
+                  <h3 style={{ 
+                    fontSize: '1.4rem', 
+                    fontWeight: 'bold', 
+                    color: '#0073BB',
+                    margin: 0,
+                    fontFamily: 'Amazon Ember, sans-serif'
+                  }}>
+                    🌐 PANEL 2: URLs DE DIRECTORIOS
+                  </h3>
+                }
+              >
+                {status && status.resultados && status.resultados.length > 0 ? (
+                  <SpaceBetween direction="vertical" size="s">
+                    {status.resultados.map((item, index) => (
+                      <Box key={index} padding="s" color="background-container-content">
+                        <SpaceBetween direction="vertical" size="xs">
+                          <Box><strong>🏢 {item.entidad}</strong></Box>
+                          <Box>
+                            <Badge color={item.contactos.exito ? "success" : "error"}>
+                              {item.contactos.exito ? "✅ URL Encontrada" : "❌ No Encontrada"}
+                            </Badge>
+                          </Box>
+                          {item.contactos.url_oficial && (
+                            <Box fontSize="body-s">
+                              <strong>Página:</strong><br/>
+                              <a href={item.contactos.url_oficial} target="_blank" rel="noopener noreferrer" style={{color: '#0073BB'}}>
+                                {item.contactos.url_oficial.length > 50 ? item.contactos.url_oficial.substring(0, 50) + '...' : item.contactos.url_oficial}
+                              </a>
                             </Box>
-                            {item.transparencia.institucion_validada && (
-                              <Box>Institución: {item.transparencia.institucion_validada}</Box>
-                            )}
-                            {item.transparencia.similitud && (
-                              <Box>Similitud: {item.transparencia.similitud}%</Box>
-                            )}
-                          </SpaceBetween>
-                        )
-                      },
-                      {
-                        id: "contactos",
-                        header: "🌐 Agente Contactos",
-                        content: item => (
-                          <SpaceBetween direction="vertical" size="xs">
-                            <Box>
-                              <Badge color={item.contactos.exito ? "success" : "error"}>
-                                {item.contactos.exito ? "✅ Exitoso" : "❌ Falló"}
-                              </Badge>
+                          )}
+                          {item.contactos.url_directorio && item.contactos.url_directorio !== item.contactos.url_oficial && (
+                            <Box fontSize="body-s">
+                              <strong>Directorio:</strong><br/>
+                              <a href={item.contactos.url_directorio} target="_blank" rel="noopener noreferrer" style={{color: '#0073BB'}}>
+                                {item.contactos.url_directorio.length > 50 ? item.contactos.url_directorio.substring(0, 50) + '...' : item.contactos.url_directorio}
+                              </a>
                             </Box>
-                            {item.contactos.datos?.url_oficial && (
-                              <Box>URL: {item.contactos.datos.url_oficial}</Box>
-                            )}
-                            {item.contactos.datos?.contactos && (
-                              <Box>Contactos: {item.contactos.datos.contactos.length}</Box>
-                            )}
-                          </SpaceBetween>
-                        )
-                      }
-                    ]
-                  }}
-                  cardsPerRow={[
-                    { cards: 1 },
-                    { minWidth: 500, cards: 2 }
-                  ]}
-                  items={status.resultados}
-                />
-                  </Container>
-                </div>
-              )}
-              
-              {/* Log Viewer */}
-              <div style={{ flex: 1 }}>
+                          )}
+                        </SpaceBetween>
+                      </Box>
+                    ))}
+                  </SpaceBetween>
+                ) : (
+                  <Box textAlign="center" color="text-status-inactive">
+                    🔍 Esperando resultados de búsqueda...
+                  </Box>
+                )}
+              </Container>
+
+              {/* PANEL 3: Agente Transparencia */}
+              <Container
+                header={
+                  <h3 style={{ 
+                    fontSize: '1.4rem', 
+                    fontWeight: 'bold', 
+                    color: '#067D62',
+                    margin: 0,
+                    fontFamily: 'Amazon Ember, sans-serif'
+                  }}>
+                    📊 PANEL 3: AGENTE TRANSPARENCIA
+                  </h3>
+                }
+              >
+                {status && status.resultados && status.resultados.length > 0 ? (
+                  <SpaceBetween direction="vertical" size="s">
+                    {status.resultados.map((item, index) => (
+                      <Box key={index} padding="s" color="background-container-content">
+                        <SpaceBetween direction="vertical" size="xs">
+                          <Box><strong>🏢 {item.entidad}</strong></Box>
+                          <Box>
+                            <Badge color={item.transparencia.exito ? "success" : "error"}>
+                              {item.transparencia.exito ? "✅ Excel Descargado" : "❌ Error"}
+                            </Badge>
+                          </Box>
+                          {item.transparencia.exito && (
+                            <>
+                              {item.transparencia.total_registros && (
+                                <Box fontSize="body-s">
+                                  <strong>Registros:</strong> {item.transparencia.total_registros}
+                                </Box>
+                              )}
+                              {item.transparencia.total_columnas && (
+                                <Box fontSize="body-s">
+                                  <strong>Columnas:</strong> {item.transparencia.total_columnas}
+                                </Box>
+                              )}
+                              {item.transparencia.similitud && (
+                                <Box fontSize="body-s">
+                                  <strong>Similitud:</strong> {item.transparencia.similitud}%
+                                </Box>
+                              )}
+                            </>
+                          )}
+                          {!item.transparencia.exito && item.transparencia.error && (
+                            <Box fontSize="body-s" color="text-status-error">
+                              {item.transparencia.error}
+                            </Box>
+                          )}
+                        </SpaceBetween>
+                      </Box>
+                    ))}
+                  </SpaceBetween>
+                ) : (
+                  <Box textAlign="center" color="text-status-inactive">
+                    📊 Esperando descarga de directorios...
+                  </Box>
+                )}
+              </Container>
+
+              {/* PANEL 4: Contactos AWS Filtrados */}
+              <Container
+                header={
+                  <h3 style={{ 
+                    fontSize: '1.4rem', 
+                    fontWeight: 'bold', 
+                    color: '#FF9900',
+                    margin: 0,
+                    fontFamily: 'Amazon Ember, sans-serif'
+                  }}>
+                    🎯 PANEL 4: CONTACTOS AWS FILTRADOS
+                  </h3>
+                }
+                style={{ gridColumn: 'span 2' }}
+              >
+                {status && status.contactos_aws && status.contactos_aws.length > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '15px' }}>
+                    {status.contactos_aws.map((contacto, index) => (
+                      <Box key={index} padding="m" color="background-container-content">
+                        <SpaceBetween direction="vertical" size="xs">
+                          <Box><strong>👤 {contacto.nombre}</strong></Box>
+                          <Box fontSize="body-s"><strong>🏢 {contacto.entidad}</strong></Box>
+                          <Box fontSize="body-s">💼 {contacto.cargo}</Box>
+                          <Box fontSize="body-s">📧 {contacto.email}</Box>
+                          <Box fontSize="body-s">📞 {contacto.telefono}</Box>
+                          <Box>
+                            <Badge color={contacto.relevancia_aws >= 80 ? "success" : contacto.relevancia_aws >= 60 ? "warning" : "error"}>
+                              🎯 {contacto.relevancia_aws}% AWS
+                            </Badge>
+                          </Box>
+                          <Box fontSize="body-s" color="text-body-secondary">
+                            <em>{contacto.razon}</em>
+                          </Box>
+                        </SpaceBetween>
+                      </Box>
+                    ))}
+                  </div>
+                ) : (
+                  <Box textAlign="center" color="text-status-inactive">
+                    📊 Esperando filtrado de contactos...
+                  </Box>
+                )}
+              </Container>
+
+              {/* Log Viewer - Ocupa toda la fila inferior */}
+              <div style={{ gridColumn: 'span 2' }}>
                 <LogViewer logs={logs} />
               </div>
               

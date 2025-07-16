@@ -301,117 +301,11 @@ class AgenteTransparencia:
         
         return estado_detectado, codigo_estado, coincidencias
     
-    def buscar_con_autocompletado(self, driver, wait, institucion):
-        """Busca usando el campo de autocompletado de la página"""
-        try:
-            print(f"🔍 Intentando autocompletado para: '{institucion}'")
-            
-            # Buscar el campo de entrada de texto
-            campo_busqueda = None
-            selectores_busqueda = [
-                ".bootstrap-select input[type='text']",
-                ".bootstrap-select .bs-searchbox input",
-                "input.form-control",
-                ".dropdown-menu input",
-                "input[placeholder*='buscar']",
-                "input[placeholder*='Buscar']"
-            ]
-            
-            for selector in selectores_busqueda:
-                try:
-                    campo_busqueda = driver.find_element(By.CSS_SELECTOR, selector)
-                    if campo_busqueda.is_displayed():
-                        print(f"✅ Campo de autocompletado encontrado")
-                        break
-                except:
-                    continue
-            
-            if not campo_busqueda:
-                print("❌ No se encontró campo de autocompletado")
-                return None, None, 0
-            
-            # Detectar estado y construir términos de búsqueda
-            estado_detectado, codigo_estado, _ = self.busqueda_inteligente_estado(institucion, [])
-            
-            if not codigo_estado:
-                print("❌ No se detectó estado")
-                return None, None, 0
-            
-            # Extraer palabras clave
-            palabras_clave = self.extraer_palabras_principales(institucion)
-            
-            # Construir términos de búsqueda progresivos
-            terminos_busqueda = [f"{codigo_estado} - Secretaria"]
-            
-            if palabras_clave:
-                # Agregar búsqueda con primera palabra parcial
-                terminos_busqueda.append(f"{codigo_estado} - Secretaria de {palabras_clave[0][:3]}")
-                # Agregar búsqueda con primera palabra completa
-                terminos_busqueda.append(f"{codigo_estado} - Secretaria de {palabras_clave[0]}")
-            
-            # Probar cada término
-            for i, termino in enumerate(terminos_busqueda):
-                print(f"🔍 Probando: '{termino}'")
-                
-                # Escribir en el campo
-                campo_busqueda.clear()
-                campo_busqueda.send_keys(termino)
-                time.sleep(3)  # Esperar filtrado
-                
-                # Obtener opciones filtradas
-                opciones_filtradas = self.obtener_opciones_filtradas(driver)
-                
-                if opciones_filtradas:
-                    print(f"📊 Opciones filtradas: {len(opciones_filtradas)}")
-                    
-                    # Si solo hay 1 opción
-                    if len(opciones_filtradas) == 1:
-                        elemento, texto = opciones_filtradas[0]
-                        print(f"✅ Única opción: '{texto}'")
-                        return elemento, texto, 100
-                    
-                    # Si hay múltiples, seleccionar la mejor
-                    mejor_elemento, mejor_texto, mejor_similitud = self.seleccionar_mejor_filtrada(opciones_filtradas, institucion)
-                    
-                    if mejor_similitud >= 60:
-                        print(f"✅ Mejor opción: '{mejor_texto}' ({mejor_similitud}%)")
-                        return mejor_elemento, mejor_texto, mejor_similitud
-            
-            print("❌ Autocompletado no encontró resultados")
-            return None, None, 0
-            
-        except Exception as e:
-            print(f"❌ Error en autocompletado: {e}")
-            return None, None, 0
+    # Método eliminado - No funciona correctamente
     
-    def obtener_opciones_filtradas(self, driver):
-        """Obtiene opciones visibles del dropdown filtrado"""
-        opciones = []
-        try:
-            elementos = driver.find_elements(By.CSS_SELECTOR, ".bootstrap-select .dropdown-menu li:not(.hidden) a")
-            for elemento in elementos:
-                if elemento.is_displayed():
-                    texto = elemento.text.strip()
-                    if texto and len(texto) > 5:
-                        opciones.append((elemento, texto))
-        except:
-            pass
-        return opciones
+    # Método eliminado - No funciona correctamente
     
-    def seleccionar_mejor_filtrada(self, opciones_filtradas, institucion_original):
-        """Selecciona la opción más similar"""
-        mejor_elemento, mejor_texto, mejor_similitud = None, "", 0
-        
-        for elemento, texto in opciones_filtradas:
-            similitud = fuzz.token_sort_ratio(institucion_original.lower(), texto.lower())
-            print(f"   📊 '{texto}' -> {similitud}%")
-            
-            if similitud > mejor_similitud:
-                mejor_similitud = similitud
-                mejor_texto = texto
-                mejor_elemento = elemento
-        
-        return mejor_elemento, mejor_texto, mejor_similitud
+    # Método eliminado - No funciona correctamente
     
     def extraer_palabras_principales(self, texto):
         """Extrae palabras clave del texto"""
@@ -614,21 +508,14 @@ class AgenteTransparencia:
             
             time.sleep(3)
             
-            # BÚSQUEDA INTELIGENTE CON ESTADOS CORREGIDA
-            print(f"\n🎯 BÚSQUEDA INTELIGENTE CON PRIORIDAD DE ESTADO")
+            # BÚSQUEDA TRADICIONAL DIRECTA
+            print(f"\n🎯 BÚSQUEDA DE INSTITUCIÓN")
             print("="*80)
             
-            # INTENTAR AUTOCOMPLETADO PRIMERO
-            resultado_autocompletado = self.buscar_con_autocompletado(driver, wait, institucion)
-            
-            if resultado_autocompletado[0]:  # Si autocompletado funcionó
-                opcion_elemento, texto_encontrado, similitud = resultado_autocompletado
-            else:
-                # FALLBACK: Método tradicional
-                print("🔄 Usando método tradicional como fallback...")
-                opcion_elemento, texto_encontrado, similitud = self.encontrar_opcion_mas_similar(
-                    driver, wait, institucion
-                )
+            # Usar método tradicional directamente
+            opcion_elemento, texto_encontrado, similitud = self.encontrar_opcion_mas_similar(
+                driver, wait, institucion
+            )
             
             if not opcion_elemento:
                 print("❌ No se encontró ninguna opción similar")
@@ -681,13 +568,16 @@ class AgenteTransparencia:
                 time.sleep(2)
                 
                 directorio_estrategias = [
+                    # Estrategias más generales primero
+                    (By.XPATH, "//*[contains(text(), 'DIRECTORIO')]"),
+                    (By.XPATH, "//div[@id='cpListaObligacionesTransparencia']//*[contains(text(), 'DIRECTORIO')]"),
+                    (By.CSS_SELECTOR, "#cpListaObligacionesTransparencia label.grid6Obligaciones"),
+                    (By.XPATH, "//div[@data-original-title='DIRECTORIO']/ancestor::label"),
+                    # Estrategias originales
                     (By.XPATH, "//div[@id='cpListaObligacionesTransparencia']//label[contains(@class, 'grid6Obligaciones')]//div[contains(@class, 'tituloObligacion')]//label[text()='DIRECTORIO']/ancestor::label"),
                     (By.XPATH, "//label[contains(@class, 'grid6Obligaciones') and .//label[text()='DIRECTORIO']]"),
                     (By.XPATH, "//div[@id='cpListaObligacionesTransparencia']//div[@class='tituloObligacion']//label[text()='DIRECTORIO']/ancestor::label"),
-                    (By.XPATH, "//div[@data-original-title='DIRECTORIO']/ancestor::label"),
                     (By.XPATH, "//label[contains(@onclick, 'seleccionObligacion') and .//label[text()='DIRECTORIO']]"),
-                    (By.CSS_SELECTOR, "#cpListaObligacionesTransparencia label.grid6Obligaciones"),
-                    (By.XPATH, "//div[@id='cpListaObligacionesTransparencia']//*[contains(text(), 'DIRECTORIO')]"),
                 ]
                 
                 directorio_encontrado = False
@@ -697,12 +587,22 @@ class AgenteTransparencia:
                     try:
                         print(f"🔍 Probando estrategia {i+1}")
                         
-                        if i == 5:  # CSS que puede devolver múltiples elementos
+                        if i == 2:  # CSS que puede devolver múltiples elementos
                             elementos = driver.find_elements(*estrategia)
                             for elemento in elementos:
                                 if "DIRECTORIO" in elemento.text:
                                     enlace_directorio = elemento
                                     break
+                        elif i == 0 or i == 1:  # Estrategia general para cualquier elemento con "DIRECTORIO"
+                            elementos = driver.find_elements(*estrategia)
+                            print(f"   📊 Encontrados {len(elementos)} elementos con 'DIRECTORIO'")
+                            for elemento in elementos:
+                                try:
+                                    if elemento.is_displayed() and elemento.is_enabled() and "DIRECTORIO" in elemento.text:
+                                        enlace_directorio = elemento
+                                        break
+                                except:
+                                    continue
                         else:
                             enlace_directorio = wait.until(EC.element_to_be_clickable(estrategia))
                         
@@ -752,8 +652,8 @@ class AgenteTransparencia:
                 return pd.DataFrame()
             
             # Esperar a que cargue el directorio
-            print("⏳ Esperando que cargue el directorio (30 segundos)...")
-            time.sleep(30)
+            print("⏳ Esperando que cargue el directorio (45 segundos)...")
+            time.sleep(45)  # Aumentar tiempo de espera
             
             print("\n🎉 ¡Directorio cargado exitosamente!")
             
@@ -937,37 +837,8 @@ class AgenteTransparencia:
                                         header_name = f"Columna_{j+1}"
                                         headers.append(header_name)  # Agregar header dinámicamente
                                     
-                                    # Múltiples métodos para extraer el contenido
-                                    texto_celda = ""
-                                    
-                                    # Método 1: data-original-title
-                                    try:
-                                        span_con_titulo = celda.find_element(By.CSS_SELECTOR, "span[data-original-title]")
-                                        texto_celda = span_con_titulo.get_attribute("data-original-title")
-                                    except:
-                                        pass
-                                    
-                                    # Método 2: texto directo
-                                    if not texto_celda:
-                                        texto_celda = celda.text.strip()
-                                    
-                                    # Método 3: innerHTML si está vacío
-                                    if not texto_celda:
-                                        try:
-                                            innerHTML = driver.execute_script("return arguments[0].innerHTML;", celda)
-                                            if innerHTML and innerHTML.strip():
-                                                # Limpiar HTML pero preservar texto
-                                                import re
-                                                texto_celda = re.sub(r'<[^>]+>', ' ', innerHTML).strip()
-                                        except:
-                                            pass
-                                    
-                                    # Método 4: textContent como último recurso
-                                    if not texto_celda:
-                                        try:
-                                            texto_celda = driver.execute_script("return arguments[0].textContent;", celda)
-                                        except:
-                                            pass
+                                    # Usar método mejorado para extraer texto completo
+                                    texto_celda = self.extraer_texto_completo_celda(driver, celda)
                                     
                                     # CORREGIR CODIFICACIÓN DE CARACTERES
                                     if texto_celda:
@@ -1161,3 +1032,39 @@ class AgenteTransparencia:
             
         except Exception:
             return texto
+    
+    def extraer_texto_completo_celda(self, driver, celda):
+        """Extrae texto completo de una celda, evitando truncamiento"""
+        try:
+            # Método 1: data-original-title (texto completo sin truncar)
+            try:
+                span_con_titulo = celda.find_element(By.CSS_SELECTOR, "span[data-original-title]")
+                texto_celda = span_con_titulo.get_attribute("data-original-title")
+                if texto_celda and not texto_celda.endswith('...'):
+                    return texto_celda
+            except:
+                pass
+            
+            # Método 2: title attribute
+            try:
+                titulo = celda.get_attribute("title")
+                if titulo and not titulo.endswith('...'):
+                    return titulo
+            except:
+                pass
+            
+            # Método 3: textContent completo
+            try:
+                texto_completo = driver.execute_script("return arguments[0].textContent;", celda)
+                if texto_completo and not texto_completo.strip().endswith('...'):
+                    return texto_completo.strip()
+            except:
+                pass
+            
+            # Método 4: texto directo como último recurso
+            texto_directo = celda.text.strip()
+            return texto_directo if texto_directo else ""
+            
+        except Exception as e:
+            print(f"⚠️ Error extrayendo texto de celda: {e}")
+            return ""
